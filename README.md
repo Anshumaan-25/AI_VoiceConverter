@@ -1,4 +1,4 @@
-# AI Voice Converter Autopilot (so-vits-svc)
+# AI Voice Converter (so-vits-svc)
 
 This workspace is now wired for your chosen path:
 
