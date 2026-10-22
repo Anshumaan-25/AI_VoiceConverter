@@ -62,3 +62,9 @@ Thumbs.db
 # Misc
 # ========================
 *.log
+
+.venv310/
+*.pth
+*.pt
+*.index
+*.backup-*/

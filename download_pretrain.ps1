@@ -1,24 +1,43 @@
 $ErrorActionPreference = "Stop"
 
-$pretrainDir = "so-vits-svc/pretrain"
+$pretrainDir = Join-Path $PSScriptRoot "so-vits-svc/pretrain"
 New-Item -ItemType Directory -Force -Path $pretrainDir | Out-Null
 
 $hubertOut = Join-Path $pretrainDir "checkpoint_best_legacy_500.pt"
-$rmvpeZip = Join-Path $pretrainDir "rmvpe.zip"
 $rmvpeOut = Join-Path $pretrainDir "rmvpe.pt"
 
-Write-Host "[1/3] Downloading ContentVec checkpoint"
-Invoke-WebRequest -Uri "https://huggingface.co/lj1995/VoiceConversionWebUI/resolve/main/hubert_base.pt" -OutFile $hubertOut
-
-Write-Host "[2/3] Downloading RMVPE archive"
-Invoke-WebRequest -Uri "https://github.com/yxlllc/RMVPE/releases/download/230917/rmvpe.zip" -OutFile $rmvpeZip
-
-Write-Host "[3/3] Extracting rmvpe.pt"
-$tmpDir = Join-Path $pretrainDir "_rmvpe_tmp"
-Expand-Archive -Path $rmvpeZip -DestinationPath $tmpDir -Force
-Copy-Item -Path (Join-Path $tmpDir "model.pt") -Destination $rmvpeOut -Force
-Remove-Item -Recurse -Force $tmpDir
-Remove-Item -Force $rmvpeZip
+if ((Test-Path -LiteralPath $hubertOut) -and (Test-Path -LiteralPath $rmvpeOut)) {
+    Write-Host "Existing weights preserved. Move them aside explicitly to replace them."
+    exit 0
+}
+$tmpDir = Join-Path $pretrainDir ("_download_" + [guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $tmpDir | Out-Null
+try {
+    if (-not (Test-Path -LiteralPath $hubertOut)) {
+        Write-Host "Downloading ContentVec checkpoint"
+        $hubertStage = Join-Path $tmpDir "hubert.pt"
+        Invoke-WebRequest -Uri "https://huggingface.co/lj1995/VoiceConversionWebUI/resolve/main/hubert_base.pt" -OutFile $hubertStage
+        if ((Get-Item -LiteralPath $hubertStage).Length -lt 1000000) { throw "Invalid encoder download" }
+        Move-Item -LiteralPath $hubertStage -Destination $hubertOut
+    }
+    if (-not (Test-Path -LiteralPath $rmvpeOut)) {
+        Write-Host "Downloading RMVPE archive"
+        $rmvpeZip = Join-Path $tmpDir "rmvpe.zip"
+        Invoke-WebRequest -Uri "https://github.com/yxlllc/RMVPE/releases/download/230917/rmvpe.zip" -OutFile $rmvpeZip
+        Expand-Archive -LiteralPath $rmvpeZip -DestinationPath $tmpDir
+        $rmvpeStage = Join-Path $tmpDir "model.pt"
+        if ((Get-Item -LiteralPath $rmvpeStage).Length -lt 1000000) { throw "Invalid RMVPE download" }
+        Move-Item -LiteralPath $rmvpeStage -Destination $rmvpeOut
+    }
+}
+finally {
+    $resolvedRoot = [IO.Path]::GetFullPath($pretrainDir) + [IO.Path]::DirectorySeparatorChar
+    $resolvedTemp = [IO.Path]::GetFullPath($tmpDir)
+    if (-not $resolvedTemp.StartsWith($resolvedRoot, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Refusing cleanup outside pretrained directory"
+    }
+    Remove-Item -LiteralPath $resolvedTemp -Recurse -Force
+}
 
 Write-Host "Done. Files created:"
 Get-Item $hubertOut, $rmvpeOut | Select-Object FullName, Length

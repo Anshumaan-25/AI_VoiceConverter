@@ -8,26 +8,29 @@ import gradio as gr
 from voice_autopilot import ROOT_DIR, infer_once, list_speakers_from_config
 
 
-DEFAULT_MODEL = ROOT_DIR / "so-vits-svc" / "logs" / "44k" / "G_0.pth"
+DEFAULT_MODEL = ""
 DEFAULT_CONFIG = ROOT_DIR / "so-vits-svc" / "configs" / "config.json"
 
 
 def _safe_speakers(config_path: Path) -> list[str]:
     try:
         speakers = list_speakers_from_config(config_path)
-        return speakers if speakers else ["speaker0"]
+        return speakers if speakers else []
     except Exception:
-        return ["speaker0"]
+        return []
 
 
 def reload_speakers(config_path: str):
     speakers = _safe_speakers(Path(config_path))
-    return gr.update(choices=speakers, value=speakers[0])
+    return gr.update(choices=speakers, value=speakers[0] if speakers else None)
 
 
 def run_conversion(audio_path: str, model_path: str, config_path: str, speaker: str, transpose: int, f0_predictor: str):
     if not audio_path:
         return None, "Please provide input audio."
+
+    if not model_path or not config_path or not speaker:
+        return None, "Select a trained model, matching configuration and target speaker."
 
     try:
         out_path = infer_once(
@@ -60,7 +63,7 @@ def build_ui() -> gr.Blocks:
                 config_path = gr.Textbox(label="Config Path", value=str(DEFAULT_CONFIG))
 
                 with gr.Row():
-                    speaker = gr.Dropdown(label="Target Speaker", choices=config_speakers, value=config_speakers[0])
+                    speaker = gr.Dropdown(label="Target Speaker", choices=config_speakers, value=config_speakers[0] if config_speakers else None)
                     reload_btn = gr.Button("Reload Speakers")
 
                 transpose = gr.Slider(label="Pitch Shift (semitones)", minimum=-12, maximum=12, step=1, value=0)

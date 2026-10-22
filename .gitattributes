@@ -1,0 +1,2 @@
+# Unified diffs must retain LF and upstream context whitespace verbatim.
+patches/*.patch text eol=lf -whitespace

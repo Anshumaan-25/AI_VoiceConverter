@@ -8,6 +8,9 @@ import shutil
 import subprocess
 import sys
 import time
+import uuid
+from audio_io import safe_child, read_audio, write_wav
+from gpu_lock import gpu_job
 from pathlib import Path
 from typing import Iterable, List
 
@@ -197,7 +200,17 @@ def run_cmd(args: List[str], cwd: Path | None = None, env: dict[str, str] | None
     if env:
         merged_env = dict(os.environ)
         merged_env.update(env)
-    result = subprocess.run(args, cwd=cwd, check=False, env=merged_env)
+    process = subprocess.Popen(args, cwd=cwd, env=merged_env)
+    try:
+        code = process.wait(timeout=86400)
+    except BaseException:
+        if os.name == "nt":
+            subprocess.run(["taskkill", "/PID", str(process.pid), "/T", "/F"], capture_output=True)
+        else:
+            process.kill()
+        process.wait()
+        raise
+    result = subprocess.CompletedProcess(args, code)
     if result.returncode != 0:
         raise RuntimeError(f"Command failed ({result.returncode}): {' '.join(args)}")
 
@@ -573,30 +586,12 @@ def list_audio_files(source_dir: Path) -> List[Path]:
 
 
 def convert_to_wav_44k_mono(src: Path, dst: Path) -> None:
-    ffmpeg_bin = resolve_ffmpeg_bin()
-    if not ffmpeg_bin:
-        raise EnvironmentError(
-            "ffmpeg binary not found. Install ffmpeg in PATH or install imageio-ffmpeg in this environment."
-        )
-
-    dst.parent.mkdir(parents=True, exist_ok=True)
-    run_cmd(
-        [
-            ffmpeg_bin,
-            "-y",
-            "-i",
-            str(src),
-            "-ac",
-            "1",
-            "-ar",
-            "44100",
-            str(dst),
-        ]
-    )
+    audio, sr = read_audio(src, target_sr=48000)
+    write_wav(dst, audio, sr)
 
 
 def list_speakers_from_config(config_path: Path) -> List[str]:
-    if not config_path.exists():
+    if not config_path.is_file():
         return []
     config = json.loads(config_path.read_text(encoding="utf-8"))
     spk = config.get("spk", {})
@@ -616,18 +611,19 @@ def prepare_dataset(source_dir: Path, speaker: str, clean_target: bool = False) 
     if not files:
         raise RuntimeError(f"No audio files found in: {source_dir}")
 
-    speaker_dir = SVC_DIR / "dataset_raw" / speaker
-    if clean_target and speaker_dir.exists():
-        shutil.rmtree(speaker_dir)
-    speaker_dir.mkdir(parents=True, exist_ok=True)
-
-    print(f"Preparing {len(files)} files for speaker '{speaker}'")
-    for idx, src in enumerate(files, start=1):
-        out_name = f"{idx:04d}_{src.stem}.wav"
-        dst = speaker_dir / out_name
-        print(f"[{idx}/{len(files)}] {src.name} -> {dst.name}")
-        convert_to_wav_44k_mono(src, dst)
-
+    speaker_dir = safe_child(SVC_DIR / "dataset_raw", speaker)
+    if source_dir.resolve() == speaker_dir or speaker_dir in source_dir.resolve().parents or source_dir.resolve() in speaker_dir.parents:
+        raise ValueError("Source cannot be inside the target directory")
+    if speaker_dir.exists() and any(speaker_dir.iterdir()) and not clean_target:
+        raise ValueError("Target contains existing data; use a new speaker or --clean-target")
+    # Keep old data recoverable, including if preparation fails.
+    if speaker_dir.exists() and clean_target:
+        backup_root = SVC_DIR / "dataset_backups"
+        backup_root.mkdir(exist_ok=True)
+        speaker_dir.rename(backup_root / (speaker_dir.name + "-" + uuid.uuid4().hex))
+    from dataset_tools import prepare_clips
+    records = prepare_clips(files, speaker_dir)
+    print(f"Prepared {len(records)} clips in {speaker_dir}")
     return speaker_dir
 
 
@@ -635,40 +631,37 @@ def run_preprocess(speech_encoder: str, f0_predictor: str, skip_loudnorm: bool) 
     _ensure_paths()
     py = _python_bin()
 
-    resample_cmd = [py, "resample.py"]
+    build_dir = SVC_DIR / "dataset" / ("prepared-" + uuid.uuid4().hex)
+    resample_cmd = [py, "resample.py", "--out_dir2", str(build_dir)]
     if skip_loudnorm:
         resample_cmd.append("--skip_loudnorm")
 
     run_cmd(resample_cmd, cwd=SVC_DIR)
+    target = SVC_DIR / "dataset" / "44k"
+    if target.exists():
+        backup_root = SVC_DIR / "dataset_backups"
+        backup_root.mkdir(exist_ok=True)
+        target.rename(backup_root / ("prepared-" + uuid.uuid4().hex))
+    build_dir.rename(target)
     run_cmd([py, "preprocess_flist_config.py", "--speech_encoder", speech_encoder], cwd=SVC_DIR)
 
-    train_file = SVC_DIR / "filelists" / "train.txt"
-    val_file = SVC_DIR / "filelists" / "val.txt"
-    if train_file.exists() and val_file.exists():
-        train_lines = [line for line in train_file.read_text(encoding="utf-8").splitlines() if line.strip()]
-        val_lines = [line for line in val_file.read_text(encoding="utf-8").splitlines() if line.strip()]
-        if not train_lines and len(val_lines) > 1:
-            moved = val_lines.pop(0)
-            train_lines.append(moved)
-            train_file.write_text("\n".join(train_lines) + "\n", encoding="utf-8")
-            val_file.write_text("\n".join(val_lines) + "\n", encoding="utf-8")
-            print(
-                "[info] train.txt was empty after split; moved one sample from val.txt to train.txt "
-                "for small-dataset compatibility."
-            )
-
-    run_cmd([py, "preprocess_hubert_f0.py", "--f0_predictor", f0_predictor], cwd=SVC_DIR)
+    from dataset_tools import validate_training_data
+    validate_training_data(SVC_DIR)
+    with gpu_job():
+        run_cmd([py, "preprocess_hubert_f0.py", "--f0_predictor", f0_predictor, "--num_processes", "1"], cwd=SVC_DIR)
 
 
 def run_train(model_name: str = "44k") -> None:
+    safe_child(SVC_DIR / "logs", model_name)
     _ensure_paths()
     py = _python_bin()
+    from dataset_tools import validate_training_data
+    validate_training_data(SVC_DIR)
     # Windows + recent torch builds can fail with libuv-enabled store initialization.
-    run_cmd(
-        [py, "train.py", "-c", "configs/config.json", "-m", model_name],
-        cwd=SVC_DIR,
-        env={"USE_LIBUV": "0"},
-    )
+    with gpu_job():
+        run_cmd([py, "train.py", "-c", "configs/config.json", "-m", model_name],
+                cwd=SVC_DIR, env={"USE_LIBUV": "0"})
+
 
 
 def infer_once(
@@ -688,65 +681,42 @@ def infer_once(
     model_path = model_path.resolve()
     config_path = config_path.resolve()
 
-    if not input_audio.exists():
+    if not input_audio.is_file():
         raise FileNotFoundError(f"Input audio not found: {input_audio}")
-    if not model_path.exists():
+    if not model_path.is_file():
         raise FileNotFoundError(f"Model file not found: {model_path}")
-    if not config_path.exists():
+    if not config_path.is_file():
         raise FileNotFoundError(f"Config file not found: {config_path}")
 
     raw_dir = SVC_DIR / "raw"
     raw_dir.mkdir(parents=True, exist_ok=True)
 
-    raw_name = f"input_{int(time.time())}.wav"
+    if speaker not in list_speakers_from_config(config_path):
+        raise ValueError("Speaker is not present in the selected model configuration")
+    if model_path.stem == "G_0":
+        raise ValueError("G_0 is an unqualified initial checkpoint; select a validated trained model")
+    if wav_format != "wav":
+        raise ValueError("Inference output must be WAV; use export_mix.py for final MP3")
+    raw_name = f"input_{uuid.uuid4().hex}.wav"
     raw_file = raw_dir / raw_name
-    convert_to_wav_44k_mono(input_audio, raw_file)
-
-    py = _python_bin()
-    run_cmd(
-        [
-            py,
-            "inference_main.py",
-            "-m",
-            str(model_path),
-            "-c",
-            str(config_path),
-            "-n",
-            raw_name,
-            "-t",
-            str(transpose),
-            "-s",
-            speaker,
-            "-f0p",
-            f0_predictor,
-            "-wf",
-            wav_format,
-        ],
-        cwd=SVC_DIR,
-    )
-
-    results_dir = SVC_DIR / "results"
-    candidates = sorted(results_dir.glob(f"{raw_name}_*"), key=lambda p: p.stat().st_mtime, reverse=True)
-    if not candidates:
-        raise RuntimeError("Inference finished but no output file was found in so-vits-svc/results")
-
-    return candidates[0]
+    try:
+        convert_to_wav_44k_mono(input_audio, raw_file)
+        with gpu_job():
+            run_cmd([_python_bin(), "inference_main.py", "-m", str(model_path), "-c", str(config_path),
+                     "-n", raw_name, "-t", str(transpose), "-s", speaker, "-f0p", f0_predictor,
+                     "-wf", "wav", "-cl", "5"], cwd=SVC_DIR)
+        candidates = list((SVC_DIR / "results").glob(f"{raw_name}_*"))
+        if len(candidates) != 1:
+            raise RuntimeError("Inference did not produce exactly one output")
+        read_audio(candidates[0])
+        return candidates[0]
+    finally:
+        raw_file.unlink(missing_ok=True)
 
 
 def check_env() -> None:
-    print("Python:", sys.version.replace("\n", " "))
-    print("Executable:", sys.executable)
-    print("ffmpeg in PATH:", "yes" if ffmpeg_exists() else "no")
-
-    try:
-        import torch
-
-        print("torch:", torch.__version__)
-        print("cuda available:", torch.cuda.is_available())
-        if torch.cuda.is_available():
-            print("cuda device:", torch.cuda.get_device_name(0))
-    except Exception as exc:  # pylint: disable=broad-except
-        print("torch check failed:", exc)
+    from health_check import check
+    check()
 
 
 def run_performance_engine(text: str, intensity: str, mode: str) -> None:
