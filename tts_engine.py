@@ -15,10 +15,12 @@ import numpy as np
 DEFAULT_TARGET_SR = 44100
 DEFAULT_BARK_VOICE = "v2/en_speaker_9"
 DEFAULT_COQUI_MODEL = "tts_models/en/ljspeech/tacotron2-DDC"
-DEFAULT_BARK_TEXT_TEMP = 0.2
+DEFAULT_BARK_TEXT_TEMP = 0.4
 DEFAULT_BARK_WAVEFORM_TEMP = 0.35
-DEFAULT_BARK_MIN_EOS_P = 0.5
+DEFAULT_BARK_MIN_EOS_P = 0.25
 DEFAULT_BARK_TRIM_TOP_DB = 38
+DEFAULT_BARK_CHUNK_WORDS = 5
+DEFAULT_BARK_CHUNK_PAUSE_MS = 150
 
 
 class TTSError(RuntimeError):
@@ -121,23 +123,32 @@ def clean_text_for_bark(text: str) -> str:
     return line
 
 
-def build_bark_chunks(lines: Sequence[str], max_chars: int = 140) -> List[str]:
-    normalized_lines = [clean_text_for_bark(line) for line in lines]
-    normalized_lines = [line for line in normalized_lines if line]
-    if not normalized_lines:
-        return []
+def chunk_text_by_words(text: str, max_words: int = DEFAULT_BARK_CHUNK_WORDS) -> List[str]:
+    """Semantic Horizon Limitation: split text into small N-word chunks.
 
+    By limiting each chunk to *max_words* words we keep Bark's transformer
+    attention focused on a tiny window, eliminating behavioural
+    hallucinations (ums, trailing fillers, phantom words).
+    """
+    cleaned = clean_text_for_bark(text)
+    words = cleaned.split()
+    if not words:
+        return []
     chunks: List[str] = []
-    current = normalized_lines[0]
-    for line in normalized_lines[1:]:
-        candidate = f"{current} {line}".strip()
-        if len(candidate) <= max_chars:
-            current = candidate
-        else:
-            chunks.append(current)
-            current = line
-    chunks.append(current)
+    for i in range(0, len(words), max_words):
+        chunk = " ".join(words[i:i + max_words]).strip()
+        if chunk:
+            chunks.append(chunk)
     return chunks
+
+
+def normalize_peak_db(audio: np.ndarray, target_db: float = -1.0) -> np.ndarray:
+    """Normalize audio so the peak amplitude hits *target_db*."""
+    peak = np.max(np.abs(audio))
+    if peak < 1e-8:
+        return audio
+    target_linear = 10.0 ** (target_db / 20.0)
+    return (audio * (target_linear / peak)).astype(np.float32)
 
 
 def trim_audio_edges(audio: np.ndarray, sample_rate: int) -> np.ndarray:
@@ -303,6 +314,14 @@ def synthesize_with_bark(
     bark_waveform_temp: float,
     bark_min_eos_p: float,
 ) -> Tuple[np.ndarray, int]:
+    """Chunk-and-Stitch Bark synthesis (Semantic Horizon Limitation).
+
+    1. Flatten all input lines into one string.
+    2. Split into tiny N-word chunks (default 5 words).
+    3. Generate each chunk independently with stabilized params.
+    4. Stitch with 150ms silence buffers.
+    5. Apply hard noise gate + peak normalization on the merged result.
+    """
     try:
         from bark import SAMPLE_RATE as bark_sample_rate  # type: ignore
         from bark import preload_models  # type: ignore
@@ -315,17 +334,30 @@ def synthesize_with_bark(
     preload_models()
 
     bark_voice = resolve_bark_history_prompt(bark_voice)
-    bark_chunks = build_bark_chunks(lines)
+
+    # --- Semantic Horizon Limitation: flatten & chunk by words ---
+    full_text = " ".join(lines)
+    bark_chunks = chunk_text_by_words(full_text, max_words=DEFAULT_BARK_CHUNK_WORDS)
     if not bark_chunks:
         raise TTSError("No usable Bark text chunks after normalization.")
 
+    print(f"[tts] chunk-and-stitch: {len(bark_chunks)} chunks "
+          f"(max {DEFAULT_BARK_CHUNK_WORDS} words each)")
+    for i, c in enumerate(bark_chunks):
+        print(f"  [{i}] \"{c}\"")
+
     set_seed(seed)
 
-    segments: List[np.ndarray] = []
-    pauses: List[float] = []
-    for idx, line in enumerate(bark_chunks):
+    sr = int(bark_sample_rate)
+    pause_samples = int(round(sr * DEFAULT_BARK_CHUNK_PAUSE_MS / 1000.0))
+    silence_buffer = np.zeros(pause_samples, dtype=np.float32)
+
+    parts: List[np.ndarray] = []
+    for idx, chunk_text in enumerate(bark_chunks):
+        print(f"[tts] generating chunk {idx + 1}/{len(bark_chunks)}: \"{chunk_text}\"")
+
         semantic_tokens = generate_text_semantic(
-            line,
+            chunk_text,
             history_prompt=bark_voice,
             temp=bark_text_temp,
             min_eos_p=bark_min_eos_p,
@@ -336,15 +368,30 @@ def synthesize_with_bark(
             temp=bark_waveform_temp,
         )
         mono = ensure_mono_float32(np.asarray(audio))
-        mono = trim_audio_edges(mono, sample_rate=int(bark_sample_rate))
-        mono = hard_noise_gate(mono, sample_rate=int(bark_sample_rate))
+        mono = trim_audio_edges(mono, sample_rate=sr)
         if mono.size == 0:
-            raise TTSError("Bark returned empty audio.")
-        segments.append(mono)
-        pauses.append(trailing_pause_seconds(line, is_last=(idx == len(bark_chunks) - 1)))
+            print(f"[tts] WARNING: chunk {idx} produced empty audio, skipping")
+            continue
+        parts.append(mono)
 
-    merged = concat_with_pauses(segments, pauses, sample_rate=int(bark_sample_rate))
-    return merged, int(bark_sample_rate)
+        # Insert 150ms silence buffer between chunks (not after the last)
+        if idx < len(bark_chunks) - 1:
+            parts.append(silence_buffer.copy())
+
+    if not parts:
+        raise TTSError("All Bark chunks produced empty audio.")
+
+    merged = np.concatenate(parts)
+
+    # --- Post-processing on the full merged signal ---
+    merged = hard_noise_gate(merged, sample_rate=sr)
+    merged = normalize_peak_db(merged, target_db=-1.0)
+
+    duration = merged.size / sr
+    print(f"[tts] chunk-and-stitch complete: {duration:.2f}s, "
+          f"{merged.size} samples @ {sr} Hz")
+
+    return merged, sr
 
 
 def synthesize_with_coqui(
