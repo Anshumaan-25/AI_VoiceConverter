@@ -18,7 +18,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--text", type=str, default=None, help="Stylized performance text")
     parser.add_argument("--text-file", type=Path, default=None, help="Path to a text file containing stylized text")
     parser.add_argument("--output", type=Path, required=True, help="Output WAV file path")
-    parser.add_argument("--model", choices=["auto", "bark", "coqui", "sapi"], default="auto", help="TTS backend; auto uses the qualified backend order")
+    parser.add_argument("--model", choices=["auto", "coqui", "sapi"], default="auto", help="Speech backend; auto uses Windows SAPI. Bark is parked indefinitely.")
     parser.add_argument("--target-sr", type=int, default=DEFAULT_TARGET_SR, help="Target output sample rate")
     parser.add_argument("--seed", type=int, default=42, help="Deterministic seed")
 

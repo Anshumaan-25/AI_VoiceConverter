@@ -62,6 +62,14 @@ def transcribe(model,path):
     return ' '.join(words).strip()
 
 
+def holdout_disagreement(source_asr,converted_asr):
+    from benchmark_speech import word_error_rate
+    if not source_asr.strip():
+        return dict(asr_disagreement=None,asr_score_status='unscorable_empty_source_asr')
+    return dict(asr_disagreement=word_error_rate(source_asr,converted_asr)[0],
+                asr_score_status='proxy_transcript_comparison_not_ground_truth')
+
+
 def qualify(workspace,output):
     check_training_gate(workspace)
     import numpy as np
@@ -154,7 +162,7 @@ def qualify(workspace,output):
     before_text=transcribe(asr,heldout_source); after_text=transcribe(asr,heldout_output)
     report['holdout']=dict(source=heldout['source_file'],source_sha256=sha256(heldout_source),
                            output_sha256=sha256(heldout_output),source_asr=before_text,converted_asr=after_text,
-                           asr_disagreement=word_error_rate(before_text,after_text)[0],
+                           **holdout_disagreement(before_text,after_text),
                            limitation='same-session reconstruction; source ASR is not ground truth')
     flush()
     # Stop a worker after actual synthesizer/encoder loading; preserve previous destination bytes.

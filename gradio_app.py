@@ -87,8 +87,7 @@ def build_ui():
             text = gr.Textbox(label='Script', lines=5, max_lines=20)
             backend = gr.Dropdown(label='Speech engine', value='sapi', choices=[
                 ('Windows voice — reliable, offline', 'sapi'),
-                ('Bark — expressive, may add words', 'bark'),
-                ('Automatic — Bark with Windows fallback', 'auto'),
+                ('Automatic — Windows voice', 'auto'),
                 ('Coqui — diagnostic only', 'coqui')])
             diagnostics = gr.Checkbox(label='Save diagnostic traces and audio locally', value=False)
             with gr.Row():

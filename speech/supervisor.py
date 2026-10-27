@@ -24,6 +24,8 @@ def automatic_backends():
     backends = qualification['automatic_order']
     if not backends or any(name not in ('bark', 'coqui', 'sapi') for name in backends):
         raise SpeechError('Invalid automatic backend qualification configuration')
+    if 'bark' in backends:
+        raise SpeechError('Bark is parked indefinitely and cannot be an automatic backend')
     return backends
 
 

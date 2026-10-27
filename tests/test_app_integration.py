@@ -74,11 +74,12 @@ class ApplicationTests(unittest.TestCase):
             deadlines = []
             def run(command, work, options, deadline, cancel, backend):
                 deadlines.append(deadline)
-                if backend == 'bark':
+                if backend == 'coqui':
                     raise WorkerTimeout('Primary deadline reached')
                 write_wav(work/'result.wav', np.ones(48000)*.1, 48000)
                 (work/'result.json').write_text(json.dumps({'chunks': []}))
             with patch('speech.supervisor.run_worker', side_effect=run), \
+                 patch('speech.supervisor.automatic_backends',return_value=['coqui','sapi']), \
                  patch('speech.supervisor.gpu_job', side_effect=nullcontext):
                 result = IsolatedSpeechGenerator().generate('Hello.', Path(temporary)/'out.wav',
                                                             SpeechOptions(request_timeout=10))

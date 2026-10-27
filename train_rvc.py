@@ -37,7 +37,7 @@ def unresolved_failure(budget):
 def execute(workspace=WORKSPACE,config_path=CONFIG,stage='smoke'):
     from rvc_runtime import verify_source,verify_assets,manifest,python_path
     from gpu_lock import gpu_job
-    if stage not in ('smoke','retry','resume','pilot'):
+    if stage not in ('smoke','retry','resume','pilot','diagnostic'):
         raise ValueError('Unknown pilot stage')
     workspace,config_path=Path(workspace).resolve(),Path(config_path).resolve()
     config=load_config(config_path)
@@ -47,7 +47,15 @@ def execute(workspace=WORKSPACE,config_path=CONFIG,stage='smoke'):
         checkpoint=checkpoint_set(workspace)
         identity=dict(features_sha256=sha256(workspace/'features.json'),config=config,
                       training_assets=manifest()['training_assets'],worker_sha256=sha256(ROOT/'rvc_training_worker.py'),
-                      source_commit=manifest()['commit'])
+                      source_commit=manifest()['commit'],numerics_sha256=sha256(ROOT/'rvc_numerics.py'))
+        if (workspace/'recovery.json').exists():
+            from rvc_recovery import parent_checkpoint
+            parent_checkpoint(workspace,identity)
+        if stage == 'diagnostic':
+            if not (workspace/'recovery.json').exists() or json.loads((workspace/'recovery.json').read_text())['mode'] != 'diagnostic':
+                raise ValueError('Diagnostic replay requires a recorded bounded recovery lineage')
+            if config['max_steps'] > 80 or config['max_seconds'] > 300:
+                raise ValueError('Diagnostic replay limit is 80 attempts / 300 seconds')
         if checkpoint and checkpoint[1]['identity'] != identity:
             raise ValueError('Resume identity mismatch; refusing pretrained fallback')
         budget=json.loads((workspace/'budget.json').read_text()) if (workspace/'budget.json').exists() else dict(attempted_steps=0,seconds=0.)
@@ -145,6 +153,6 @@ if __name__ == '__main__':
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--workspace',type=Path,default=WORKSPACE)
     parser.add_argument('--config',type=Path,default=CONFIG)
-    parser.add_argument('--stage',choices=('smoke','retry','resume','pilot'),default='smoke')
+    parser.add_argument('--stage',choices=('smoke','retry','resume','pilot','diagnostic'),default='smoke')
     args=parser.parse_args()
     execute(args.workspace,args.config,args.stage)

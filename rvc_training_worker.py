@@ -25,7 +25,8 @@ def train(directory,trace):
     cache = verify_cache(workspace)
     identity = dict(features_sha256=sha256(workspace/'features.json'),config=config,
                     training_assets=manifest()['training_assets'],
-                    worker_sha256=sha256(Path(__file__)),source_commit=manifest()['commit'])
+                    worker_sha256=sha256(Path(__file__)),source_commit=manifest()['commit'],
+                    numerics_sha256=sha256(ROOT/'rvc_numerics.py'))
     if identity != request['identity']:
         raise ValueError('Training identity changed before worker start')
     sys.path.insert(0,str(SOURCE))
@@ -35,6 +36,12 @@ def train(directory,trace):
     from infer.lib.train.mel_processing import spectrogram_torch,spec_to_mel_torch,mel_spectrogram_torch
     if not torch.cuda.is_available():
         raise RuntimeError('CUDA unavailable; pilot does not silently fall back to CPU')
+    precision=config.get('precision','fp16')
+    if precision not in ('fp16','bf16'):
+        raise ValueError('Supported training precision is fp16 or bf16')
+    if precision == 'bf16' and not torch.cuda.is_bf16_supported():
+        raise RuntimeError('Selected GPU/runtime does not support BF16; no silent precision fallback')
+    amp_dtype=torch.bfloat16 if precision == 'bf16' else torch.float16
     torch.set_num_threads(4)
     torch.cuda.set_per_process_memory_fraction(min(.85,3.4*1024**3/torch.cuda.get_device_properties(0).total_memory))
     torch.backends.cudnn.benchmark = False
@@ -45,6 +52,11 @@ def train(directory,trace):
     net_g = SynthesizerTrnMs768NSFsid(data['filter_length']//2+1,segment//480,**model,is_half=True,sr=48000)
     net_d = MultiPeriodDiscriminatorV2(model['use_spectral_norm'])
     checkpoint = checkpoint_set(workspace)
+    migrating=False
+    if checkpoint is None and (workspace/'recovery.json').exists():
+        from rvc_recovery import parent_checkpoint
+        checkpoint=parent_checkpoint(workspace,identity)
+        migrating=True
     if not checkpoint:
         for net,key in ((net_g,'generator'),(net_d,'discriminator')):
             state = torch.load(SOURCE/manifest()['training_assets'][key]['file'],map_location='cpu')
@@ -55,12 +67,14 @@ def train(directory,trace):
     optim_d = torch.optim.AdamW(net_d.parameters(),lr=1e-4,betas=(.8,.99),eps=1e-9)
     scheduler_g = torch.optim.lr_scheduler.ExponentialLR(optim_g,gamma=.999875)
     scheduler_d = torch.optim.lr_scheduler.ExponentialLR(optim_d,gamma=.999875)
-    scaler = GradScaler(enabled=True,init_scale=1024)
+    scaler = GradScaler(enabled=precision == 'fp16',init_scale=1024)
     step,epoch,offset = 0,0,0
     if checkpoint:
         state = torch.load(checkpoint[0],map_location='cpu')
-        if state['identity'] != identity or checkpoint[1]['identity'] != identity:
+        if not migrating and (state['identity'] != identity or checkpoint[1]['identity'] != identity):
             raise ValueError('Resume configuration/data/code identity mismatch')
+        if migrating and state['identity'] != checkpoint[1]['identity']:
+            raise ValueError('Parent state and complete-set manifest disagree')
         net_g.load_state_dict(state['g'],strict=True); net_d.load_state_dict(state['d'],strict=True)
         optim_g.load_state_dict(state['optim_g']); optim_d.load_state_dict(state['optim_d'])
         scheduler_g.load_state_dict(state['scheduler_g']); scheduler_d.load_state_dict(state['scheduler_d'])
@@ -73,7 +87,11 @@ def train(directory,trace):
     if not clips:
         raise ValueError('Training split is empty')
     trace.event('training_loaded',step=step,epoch=epoch,offset=offset,clips=len(clips),
-                profile=dict(batch_size=1,fp16=True,workers=0,gpu_cache=False,segment_size=segment),resumed=bool(checkpoint))
+                profile=dict(batch_size=1,mixed_precision=precision,workers=0,gpu_cache=False,segment_size=segment),resumed=bool(checkpoint),
+                migrated_parent=checkpoint[1]['sha256'] if migrating else None)
+    from rvc_numerics import NumericalProbe
+    probe=NumericalProbe(directory,trace)
+    if config.get('diagnostic'): probe.attach(net_g,net_d)
     initial_step = step
     updates = {'g':0,'d':0}
     optim_g.register_step_post_hook(lambda *args: updates.__setitem__('g',updates['g']+1))
@@ -100,6 +118,7 @@ def train(directory,trace):
             break
         trace.begin_chunk(attempt)
         attempted += 1
+        probe.step=step
         atomic_json(directory/'progress.json',dict(attempted_steps=attempted,step=step,initial_step=initial_step))
         order = list(range(len(clips))); random.Random(config['seed']+epoch).shuffle(order)
         clip = clips[order[offset]]
@@ -122,7 +141,8 @@ def train(directory,trace):
         if spec.shape[-1] != frames:
             raise ValueError('Spectrogram frame alignment differs from cached features')
         before_updates = dict(updates)
-        with autocast():
+        trace.event('training_input',step=step,epoch=epoch,offset=offset,clip=clip['source_file'])
+        with autocast(dtype=amp_dtype):
             y_hat,ids_slice,_,z_mask,latent = net_g(phone,length,pitch_t,pitchf,spec,length,sid)
             z,z_p,m_p,logs_p,m_q,logs_q = latent
             mel = spec_to_mel_torch(spec,2048,128,48000,0,None)
@@ -135,11 +155,16 @@ def train(directory,trace):
         if not torch.isfinite(loss_d):
             raise RuntimeError('Nonfinite discriminator loss')
         optim_d.zero_grad(set_to_none=True)
-        scaler.scale(loss_d).backward(); scaler.unscale_(optim_d); scaler.step(optim_d)
+        scaler.scale(loss_d).backward(); scaler.unscale_(optim_d)
+        if config.get('diagnostic') or precision == 'bf16':
+            finite=probe.gradients('d',net_d.parameters())
+            if precision == 'bf16' and not finite:
+                raise RuntimeError('Nonfinite unscaled discriminator gradients; update rejected')
+        scaler.step(optim_d)
         # D is fixed for G's update; gradients still propagate through its input.
         optim_d.zero_grad(set_to_none=True)
         for p in net_d.parameters(): p.requires_grad_(False)
-        with autocast():
+        with autocast(dtype=amp_dtype):
             dr,dg,fr,fg = net_d(real,y_hat)
             with autocast(enabled=False):
                 loss_mel = torch.nn.functional.l1_loss(y_mel.float(),y_hat_mel.float())*45
@@ -150,7 +175,12 @@ def train(directory,trace):
         if not torch.isfinite(loss_g):
             raise RuntimeError('Nonfinite generator loss')
         optim_g.zero_grad(set_to_none=True)
-        scaler.scale(loss_g).backward(); scaler.unscale_(optim_g); scaler.step(optim_g); scaler.update()
+        scaler.scale(loss_g).backward(); scaler.unscale_(optim_g)
+        if config.get('diagnostic') or precision == 'bf16':
+            finite=probe.gradients('g',net_g.parameters())
+            if precision == 'bf16' and not finite:
+                raise RuntimeError('Nonfinite unscaled generator gradients; update rejected')
+        scaler.step(optim_g); scaler.update()
         for p in net_d.parameters(): p.requires_grad_(True)
         optim_g.zero_grad(set_to_none=True)
         success = all(updates[k] > before_updates[k] for k in updates)

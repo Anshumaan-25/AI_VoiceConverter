@@ -5,13 +5,16 @@ import subprocess
 from audio_io import read_audio
 from voice_autopilot import resolve_ffmpeg_bin
 
-def export_mix(vocals, instrumental, output, presence_db=8.0):
+def export_mix(vocals, instrumental, output, presence_db=8.0, vocal_gain_db=0):
     from tempfile import TemporaryDirectory
     from audio_io import write_wav
     vocals, instrumental, output = map(Path, (vocals, instrumental, output))
-    if output.suffix.lower() != ".mp3" or not 0 <= presence_db <= 12:
-        raise ValueError("Final export must be MP3; presence gain must be 0–12 dB")
-    if output.resolve() in (vocals.resolve(), instrumental.resolve()):
+    import math,os
+    if output.suffix.lower() not in ('.mp3','.wav') or not math.isfinite(presence_db) or not 0 <= presence_db <= 12:
+        raise ValueError("Final export must be MP3 or PCM24 WAV; presence gain must be 0–12 dB")
+    if not math.isfinite(vocal_gain_db) or not -12 <= vocal_gain_db <= 12:
+        raise ValueError('Vocal mix gain must be finite and within -12 to +12 dB')
+    if any(output.resolve() == p.resolve() or (output.exists() and p.exists() and os.path.samefile(output,p)) for p in (vocals,instrumental)):
         raise ValueError("Output cannot overwrite an input")
     ffmpeg = resolve_ffmpeg_bin()
     if not ffmpeg:
@@ -22,13 +25,16 @@ def export_mix(vocals, instrumental, output, presence_db=8.0):
         for source, name in ((vocals, "vocals.wav"), (instrumental, "instrumental.wav")):
             audio, sr = read_audio(source, mono=False)
             write_wav(temporary / name, audio, sr)
-        filters = (f"[0:a]equalizer=f=5656.854:t=o:w=1:g={presence_db}[v];"
-                   "[v][1:a]amix=inputs=2:duration=longest:normalize=0,"
+        filters = (f"[0:a]aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo,"
+                   f"volume={vocal_gain_db}dB,equalizer=f=5656.854:t=o:w=1:g={presence_db}[v];"
+                   "[1:a]aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo[i];"
+                   "[v][i]amix=inputs=2:duration=longest:normalize=0,"
                    "alimiter=limit=0.89:level=0:latency=1[out]")
-        rendered = temporary / "final.mp3"
+        rendered = temporary / ('final'+output.suffix.lower())
+        codec=['-c:a','libmp3lame','-b:a','320k'] if output.suffix.lower() == '.mp3' else ['-c:a','pcm_s24le']
         subprocess.run([ffmpeg, "-nostdin", "-v", "error", "-y", "-i", str(temporary / "vocals.wav"),
                         "-i", str(temporary / "instrumental.wav"), "-filter_complex", filters,
-                        "-map", "[out]", "-ar", "48000", "-c:a", "libmp3lame", "-b:a", "320k",
+                        "-map", "[out]", "-ar", "48000", *codec,
                         str(rendered)], check=True, timeout=1800)
         rendered.replace(output)
     return output

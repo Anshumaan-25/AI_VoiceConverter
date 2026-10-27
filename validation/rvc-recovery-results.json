@@ -1,0 +1,150 @@
+{
+  "schema": 1,
+  "date": "2026-10-27",
+  "status": "recovery_and_speech_qualification_passed_awaiting_suno_inputs",
+  "bark": "parked_indefinitely",
+  "original_recording_sha256": "c3cae9cd4b08709aa50ea1641519a4b1c9788264d1db7654110377fabd20035e",
+  "original_failed_run": "preserved",
+  "diagnosis": {
+    "fp16_replay_steps": 80,
+    "seconds": 93.625,
+    "original_failure_reproduced": false,
+    "root_cause": "unproven"
+  },
+  "recovery": {
+    "precision": "bf16_autocast_fp32_parameters",
+    "new_attempts": 500,
+    "new_successful_pairs": 500,
+    "skipped_updates": 0,
+    "final_step": 700,
+    "seconds": 624.266,
+    "peak_allocated_bytes": 2848413696,
+    "peak_reserved_bytes": 3120562176,
+    "peak_sampled_device_mib": 3109,
+    "all_workers_exited": true,
+    "all_gpu_after_mib": [
+      0,
+      0,
+      0
+    ]
+  },
+  "checkpoint": {
+    "step": 700,
+    "sha256": "b12a66e8098e5241e373468c45a5c3d96c1678b750f180fceb4334f8b62798f1",
+    "bytes": 1309418432
+  },
+  "inference_export": {
+    "file": "pilot-v2-48k.pth",
+    "sha256": "5ec373301bae3a2a942dc0cc834490d48f69a98f8a7761393a3c701071fbaa5d",
+    "step": 700,
+    "parent_sha256": "b12a66e8098e5241e373468c45a5c3d96c1678b750f180fceb4334f8b62798f1",
+    "quality": "unqualified pilot"
+  },
+  "index": {
+    "sha256": "11c086614a5f116697f3f89a6503460af7d2d469453dea947598c627d5325a12",
+    "vectors": 47184,
+    "metric": "L2",
+    "kind": "flat",
+    "split": "train",
+    "feature_manifest_sha256": "31d8f94e3ca0e2330e8429e6567ab9454304adbef701b138608c3374d24dd3a3"
+  },
+  "conversion_records": [
+    {
+      "index_rate": 0,
+      "frames": 86575,
+      "source_wer": 0.0,
+      "converted_wer": 0.0,
+      "peak_allocated_bytes": 613517824,
+      "peak_reserved_bytes": 658505728,
+      "peak_device_gpu_mib": 719,
+      "memory_recovered": true
+    },
+    {
+      "index_rate": 0.5,
+      "frames": 86575,
+      "source_wer": 0.0,
+      "converted_wer": 0.0,
+      "peak_allocated_bytes": 613517824,
+      "peak_reserved_bytes": 658505728,
+      "peak_device_gpu_mib": 709,
+      "memory_recovered": true
+    },
+    {
+      "index_rate": 0,
+      "frames": 469194,
+      "source_wer": 0.0,
+      "converted_wer": 0.0,
+      "peak_allocated_bytes": 687491584,
+      "peak_reserved_bytes": 811597824,
+      "peak_device_gpu_mib": 737,
+      "memory_recovered": true
+    },
+    {
+      "index_rate": 0,
+      "frames": 973308,
+      "source_wer": 0.01694915254237288,
+      "converted_wer": 0.01694915254237288,
+      "peak_allocated_bytes": 696661504,
+      "peak_reserved_bytes": 811597824,
+      "peak_device_gpu_mib": 763,
+      "memory_recovered": true
+    }
+  ],
+  "lifecycle": [
+    {
+      "mode": "cancel",
+      "loaded": true,
+      "error": "Speech request cancelled",
+      "destination_preserved": true,
+      "gpu_after_mib": 0
+    },
+    {
+      "mode": "timeout",
+      "loaded": true,
+      "error": "chunk timeout at chunk 0 after 0.001s",
+      "destination_preserved": true,
+      "gpu_after_mib": 0
+    }
+  ],
+  "post_cancellation_request": "passed",
+  "ui": {
+    "conversion_status": "Conversion finished.",
+    "speech_status": "Speech ready. Engine: sapi; chunks: 1.",
+    "audio_contract": "48000 PCM_24 mono",
+    "converted_sha256": "9df923a5e8acb83c869130c0b1c8c0d6c3f957ac0d749ffc9552d6ce2f2e867d",
+    "speech_sha256": "ff24c5ab57ac4679c45071f5221046da6737b5d9f0525e58015e8320d47d6811"
+  },
+  "holdout_status": "unscorable_empty_source_asr",
+  "tests": {
+    "passed": 70,
+    "VOICE_TEST_GPU": 1,
+    "log_sha256": "a5d421c1aad5af7860b61dd11067e4004e6c09e01c0b2c6c08a3d4e490bc6ffb",
+    "additional_direct_checks": "empty reference is unscorable; parked automatic-backend guard and CLI rejection"
+  },
+  "health": {
+    "tts": {
+      "status": "passed",
+      "log_sha256": "b7c1939299037255377d3cd30e896f46d39f3d0aaccbedf82d936271051030de"
+    },
+    "rvc": {
+      "status": "passed",
+      "log_sha256": "e913c755f41a45ed6b499096588adbd89b7fc0568f63063a100556059ff61816"
+    }
+  },
+  "song_demo": {
+    "real_suno_render": "blocked_missing_source_paths",
+    "synthetic_transport_mix_fixture": "passed_actual_ffmpeg_with_mock_converter",
+    "wav": "48000 PCM_24 stereo, 1440000 frames",
+    "mp3": "48000 stereo, 320000 bit/s",
+    "requested_seconds": 30
+  },
+  "final": {
+    "gpu_used_mib": 0,
+    "free_disk_bytes": 20617015296
+  },
+  "pending": [
+    "Suno vocal and matching instrumental paths (or identified full song)",
+    "30-second real singing conversion/mix",
+    "human voice-similarity and singing-quality listening"
+  ]
+}

@@ -1,8 +1,8 @@
 {
-  "automatic_order": ["bark", "sapi"],
-  "date": "2026-10-26",
+  "automatic_order": ["sapi"],
+  "date": "2026-10-27",
   "scope": "English spoken text on this Windows workstation; not singing or multilingual qualification.",
-  "bark": "Six benchmark requests passed at temperatures 0.7/0.7. Word accuracy is imperfect; see MILESTONE_1_REPORT.md.",
+  "bark": "Parked indefinitely at the user's request. No automatic or explicit Bark generation is enabled.",
   "coqui": "Excluded from automatic mode: one of six requests hit the decoder cap at seed 42. Explicit diagnostic use remains available.",
   "sapi": "Twelve requests passed using Microsoft David Desktop, CPU only; fallback changes voice and prosody."
 }

@@ -32,6 +32,8 @@ class SpeechOptions:
     diagnostics: str | None = None
 
     def validate(self):
+        if self.backend == 'bark':
+            raise ValueError('Bark is parked indefinitely. Use SAPI for speech or the Suno vocal-to-RVC workflow for songs.')
         if self.backend not in ("auto", "bark", "coqui", "sapi"):
             raise ValueError("Unknown speech backend")
         if self.device not in ("auto", "cpu", "cuda"):

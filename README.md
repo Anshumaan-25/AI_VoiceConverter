@@ -6,7 +6,9 @@ Windows/Python 3.10 tools for speech generation, so-vits-svc and isolated RVC vo
 
 This checkout contains so-vits-svc, an isolated RVC adapter, Bark/optional Coqui TTS, dataset preparation, a Gradio interface, and CPU stem mixing/export. The Demucs/RVC `pipeline.py` and `test_sweep.py` described in an earlier handoff are **not present**. RVC is implemented through `rvc_adapter.py` and `rvc_worker.py`; the earlier handoff's benchmarks do not apply.
 
-See [MILESTONE_1_REPORT.md](MILESTONE_1_REPORT.md) for TTS qualification, [MILESTONE_2_REPORT.md](MILESTONE_2_REPORT.md) for RVC/dataset readiness, [MILESTONE_3_REPORT.md](MILESTONE_3_REPORT.md) for the bounded training pilot and [AUDIT_REPORT.md](AUDIT_REPORT.md) for the earlier audit. RVC runtime/assets and process safety are tested. The pilot stopped on a nonfinite loss after 239 successful paired updates; its last complete checkpoint is step 200. Real trained-voice conversion and acoustic quality remain **unqualified**. Further training is blocked pending numerical diagnosis.
+Current direction: **Suno vocal stem → RVC target voice → mix with the original instrumental**. Bark is parked indefinitely and disabled in automatic/explicit speech generation. Optional speech generation uses Windows SAPI.
+
+See [RVC_RECOVERY_REPORT.md](RVC_RECOVERY_REPORT.md) for the current recovery and song-demo status. The historical reports remain: [Milestone 1](MILESTONE_1_REPORT.md), [Milestone 2](MILESTONE_2_REPORT.md), [Milestone 3](MILESTONE_3_REPORT.md) and the [earlier audit](AUDIT_REPORT.md). A BF16 recovery run completed 500 new finite paired updates from the intact step-200 checkpoint, reaching step 700. The original FP16 failure was not reproduced by an instrumented 80-update replay; its exact cause remains unproven. Voice similarity and singing quality require listening.
 
 The completed UI integration and latest verification are recorded in [INTEGRATION_REPORT.md](INTEGRATION_REPORT.md). Start `./venv310/Scripts/python.exe gradio_app.py` and open http://127.0.0.1:7860. Generate speech in the first tab, listen, then use **Use this speech for conversion** to populate the second tab. The UI defaults to the reliable offline Windows voice; the CLI retains its automatic Bark/fallback default. Cancel stops the session's active worker and waits for cleanup. Outputs are retained locally under `logs/app/`; diagnostic retention is optional.
 
@@ -32,18 +34,18 @@ Pretrained weights can be bootstrapped with `./download_pretrain.ps1`. Existing 
 ./venv310/Scripts/python.exe tts_engine.py --text "Testing the audio pipeline." --model auto --output output.wav
 ```
 
-`auto` tries Bark with text/waveform temperatures 0.7/0.7, then the offline Windows SAPI voice if generation fails validation or times out. Coqui remains available through `--model coqui` for diagnostics; its current Tacotron configuration failed one of six benchmark requests and is excluded from automatic mode. Fallback restarts the entire utterance to avoid changing voices between chunks and is logged explicitly.
+`auto` uses the offline Windows SAPI voice. Bark is disabled indefinitely at the user's request; no Bark work is part of the song workflow. Coqui remains available through `--model coqui` for diagnostics; its current Tacotron configuration failed one of six benchmark requests and is excluded from automatic mode.
 
 ```powershell
 ./venv310/Scripts/python.exe tts_engine.py --model sapi --text "Testing the audio pipeline." --output speech.wav
-./venv310/Scripts/python.exe tts_engine.py --model bark --text "Testing the audio pipeline." --output speech.wav --diagnostics logs/tts
+./venv310/Scripts/python.exe tts_engine.py --model sapi --text "Testing the audio pipeline." --output speech.wav --diagnostics logs/tts
 ```
 
-The controller never imports PyTorch. Each backend runs inside a separate process tree with a Windows kill-on-close job. Model loading, each chunk, and the entire request have deadlines (`--load-timeout`, `--chunk-timeout`, `--request-timeout`). Bark bounds semantic decoding; Coqui caps decoder steps and rejects cap hits before vocoder synthesis. Default chunk audio is limited to at most 12 seconds. Timeout or cancellation kills descendants and waits for termination before another backend starts. A failed generation leaves an existing destination unchanged.
+The controller never imports PyTorch. Each backend runs inside a separate process tree with a Windows kill-on-close job. Model loading, each chunk, and the entire request have deadlines (`--load-timeout`, `--chunk-timeout`, `--request-timeout`). Coqui caps decoder steps and rejects cap hits before vocoder synthesis. Default chunk audio is limited to at most 12 seconds. Timeout or cancellation kills descendants and waits for termination. A failed generation leaves an existing destination unchanged.
 
-Automatic mode reserves part of the whole-request budget for fallback (up to 180 seconds and at most 30% of the requested timeout). This gives the fallback an opportunity to run after a primary timeout; it cannot guarantee completion for every text or unusually short deadline.
+The supervisor retains tested whole-utterance fallback behavior for a future reviewed multi-engine configuration. The current automatic configuration contains SAPI only.
 
-Bark retains small models and CPU offloading. CUDA is used when available; `--device cpu` enables explicit CPU diagnostics. When CUDA is unavailable, automatic mode proceeds to SAPI. `VOICE_CPU_THREADS` controls model CPU threads. SAPI uses an installed English Windows voice, preferring Microsoft David Desktop; choose another using `--sapi-voice`. It needs neither network access nor GPU memory, but its voice is less expressive. No input recordings are uploaded. Edge TTS was not selected because its compressed MP3 transport conflicts with the lossless intermediate requirement.
+SAPI uses an installed English Windows voice, preferring Microsoft David Desktop; choose another using `--sapi-voice`. It needs neither network access nor GPU memory. No input recordings are uploaded. Edge TTS was not selected because its compressed MP3 transport conflicts with the lossless intermediate requirement. Legacy Bark assets are preserved while its execution remains disabled.
 
 Every chunk is checked for finite samples, bounded duration, silence, persistent tones, saturation and WebRTC speech activity before stitching. Trimming preserves 120 ms padding and gain processing only attenuates. Model-native samples and VAD's 16 kHz PCM16 buffers stay in memory; persisted audio is 48 kHz PCM24. VAD cannot prove that every word was spoken; transcription benchmarks and listening remain separate qualification steps. Singing and multilingual output are not qualified by this milestone.
 
@@ -137,9 +139,21 @@ For a newly reviewed pilot, the entry points are:
 
 `setup_rvc.ps1 -TrainingAssets` also downloads the hash-verified v2 48 kHz generator/discriminator pair. Training configuration is `configs/rvc_pilot.json`. Across stages the controller permits at most 500 attempted steps and 1800 seconds; a durable reservation prevents a controller crash from resetting the allowance. Actual optimizer updates, skipped updates, losses, sample order and GPU memory are recorded. Complete resume sets contain both networks, optimizer/scheduler/scaler/RNG state and sample position. Interrupted writes never replace the last complete set; two complete sets are retained.
 
-**The current workspace is stopped at a failed safety gate.** Repeating training or `qualify_rvc_model.py` is explicitly rejected. Do not delete/reset its budget or change workspaces to bypass the stop. The existing step-9 inference export predates the failure and is an unqualified diagnostic artifact. Step 200 was verified on CPU after the failure and was not resumed or promoted to an inference export. See the Milestone 3 report for the next numerical investigation and retained evidence.
+**The original Milestone 3 workspace remains stopped at its failed safety gate.** Its budgets/checkpoints were preserved. The user authorized a separately recorded recovery lineage in `RECOVERY_AND_SUNO_PLAN.md`. `rvc_recovery.py` verifies the parent checkpoint and immutable feature/asset/architecture identity before restoring state; it does not reset the failed run. The current step-700 export and matching training-only index are under `logs/rvc-recovery/bf16/`. Those local files remain ignored and are pilot artifacts; no production voice-quality claim follows from successful training.
 
-`qualify_rvc_model.py` supplies the later engineering qualification workflow: a training-only bounded L2 index, repeated real conversions, ASR comparisons, cancellation/deadline checks and queued UI playback/download checks. Its full model workflow remains unexecuted because the training gate failed; it requires the existing optional local Vosk model for ASR. No custom-voice listening pairs were generated in this milestone.
+`qualify_rvc_model.py` supplies engineering qualification: a training-only bounded L2 index, repeated real conversions, ASR comparisons, cancellation/deadline checks and queued UI playback/download checks. It requires the existing optional local Vosk model for ASR. Current results and listening pairs are recorded in the recovery report.
+
+### 30-second song demonstration
+
+Supply matching Suno vocal and instrumental stems from the same song/export, with a shared timeline. Originals remain unchanged. The command prepares the same 30-second interval from each, converts the mono vocal, preserves the instrumental channels, and publishes an original comparison mix, converted vocal, stereo PCM24/48 kHz master and final 320 kbps MP3:
+
+```powershell
+./venv310/Scripts/python.exe -B song_demo.py --vocals "C:/path/song-vocals.wav" --instrumental "C:/path/song-instrumental.wav" --model logs/rvc-recovery/bf16/pilot-v2-48k.pth --output-dir logs/song-demo --start 0
+```
+
+Choose a new output directory each time. `--start` is seconds on the shared stem timeline. The default retrieval strength is zero; a matching index can be supplied with `--index logs/rvc-recovery/bf16/pilot-v2-48k.index --index-rate 0.5`. Pitch is preserved by default; `--transpose` explicitly changes semitones if a guide's register needs adjustment.
+
+The demo defaults to zero presence EQ. One recorded whole-clip vocal RMS gain, bounded to +/-12 dB, balances the converted mix against the guide; the raw converted stem is retained. A 0.89 limiter protects the mix. `report.json` records source/model/index hashes, selected interval, preparation/mix gains and output format/level measurements. Missing or short stems fail rather than fabricating/padding a performance. Existing demo directories are never overwritten; failed staging preserves diagnostics.
 
 Optional real asset probe, using an existing short speech WAV:
 
