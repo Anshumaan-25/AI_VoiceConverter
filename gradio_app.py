@@ -54,15 +54,23 @@ def use_speech(path):
     return path
 
 
-def run_conversion(audio_file, model_path, config_path, speaker, transpose, f0_predictor, session):
+def converter_controls(backend):
+    choices = ['rmvpe','harvest','pm'] if backend == 'rvc' else ['rmvpe','dio','pm','harvest','crepe','fcpe']
+    return gr.update(visible=backend == 'so-vits-svc'),gr.update(visible=backend == 'rvc'),gr.update(choices=choices,value='rmvpe')
+
+
+def run_conversion(audio_file, model_path, config_path, speaker, transpose, f0_predictor, session,
+                   backend='so-vits-svc', index=None, index_rate=0, speaker_id=0):
     if not audio_file:
         return None, 'Provide an audio file or use the generated speech.'
-    if not model_path or not config_path or not speaker:
-        return None, 'Select a trained model, matching configuration and target speaker.'
+    if not model_path:
+        return None, 'Select a trusted trained checkpoint for the selected converter.'
+    if backend == 'so-vits-svc' and (not config_path or not speaker):
+        return None, 'Select a matching so-vits configuration and target speaker.'
     try:
-        source = getattr(audio_file, 'name', audio_file)
+        source = audio_file if isinstance(audio_file,(str,Path)) else audio_file.name
         output = SERVICE.convert(_session_id(session), Path(source), model_path, config_path,
-                                 speaker, transpose, f0_predictor)
+                                 speaker, transpose, f0_predictor,backend,index,index_rate,speaker_id)
         return str(output), 'Conversion finished.'
     except Exception as exc:
         LOGGER.exception('Voice conversion failed')
@@ -90,14 +98,20 @@ def build_ui():
             speech_status = gr.Textbox(label='Status', interactive=False)
             use_generated = gr.Button('Use this speech for conversion')
         with gr.Tab('Convert voice'):
-            gr.Markdown('The current converter is **so-vits-svc**. It needs a trained so-vits checkpoint and its matching configuration. RVC models are not supported yet.')
+            gr.Markdown('Select the converter matching your trusted trained checkpoint. RVC and so-vits use different model formats. RVC needs its separate local runtime; run setup_rvc.ps1 once to prepare it.')
+            converter = gr.Dropdown(label='Voice converter',choices=['so-vits-svc','rvc'],value='so-vits-svc')
             # File upload preserves PCM24 bytes; Audio preprocessing can re-encode to PCM16.
             input_audio = gr.File(label='Source audio (WAV or FLAC)', type='file', file_types=['.wav', '.flac'])
             model = gr.Textbox(label='Trained model path', value='')
-            config = gr.Textbox(label='Configuration path', value=str(DEFAULT_CONFIG))
-            with gr.Row():
-                speaker = gr.Dropdown(label='Target speaker', choices=speakers, value=speakers[0] if speakers else None)
-                reload = gr.Button('Reload speakers')
+            with gr.Group() as svc_controls:
+                config = gr.Textbox(label='so-vits configuration path', value=str(DEFAULT_CONFIG))
+                with gr.Row():
+                    speaker = gr.Dropdown(label='Target speaker', choices=speakers, value=speakers[0] if speakers else None)
+                    reload = gr.Button('Reload speakers')
+            with gr.Group(visible=False) as rvc_controls:
+                index = gr.Textbox(label='RVC feature index (optional at strength zero)',value='')
+                index_rate = gr.Slider(label='Retrieval strength',minimum=0,maximum=1,step=.05,value=0)
+                speaker_id = gr.Number(label='RVC speaker ID (zero for a single-speaker model)',value=0,precision=0)
             transpose = gr.Slider(label='Pitch shift (semitones)', minimum=-12, maximum=12, step=1, value=0)
             predictor = gr.Dropdown(label='Pitch detector', choices=['rmvpe','dio','pm','harvest','crepe','fcpe'], value='rmvpe')
             with gr.Row():
@@ -106,9 +120,11 @@ def build_ui():
             converted = gr.Audio(label='Converted speech', type='filepath')
             conversion_status = gr.Textbox(label='Status', interactive=False)
         reload.click(reload_speakers, config, speaker, queue=False, api_name=False)
+        converter.change(converter_controls,converter,[svc_controls,rvc_controls,predictor],queue=False,api_name=False)
         generation = generate.click(generate_speech, [text, backend, diagnostics, session],
                                     [speech_audio, generated_path, speech_status], api_name='generate_speech')
-        conversion = convert.click(run_conversion, [input_audio, model, config, speaker, transpose, predictor, session],
+        conversion = convert.click(run_conversion, [input_audio, model, config, speaker, transpose, predictor, session,
+                                                   converter,index,index_rate,speaker_id],
                                    [converted, conversion_status], api_name='convert_voice')
         use_generated.click(use_speech, generated_path, input_audio, queue=False, api_name=False)
         stop_speech.click(cancel_job, session, speech_status, queue=False, cancels=[generation], api_name=False)

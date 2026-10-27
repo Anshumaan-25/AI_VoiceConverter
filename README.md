@@ -1,12 +1,12 @@
 # AI Voice Converter
 
-Windows/Python 3.10 tools for Bark speech generation and so-vits-svc voice conversion. The local GPU target is an RTX 3050 with 4 GB VRAM.
+Windows/Python 3.10 tools for speech generation, so-vits-svc and isolated RVC voice conversion. The local GPU target is an RTX 3050 with 4 GB VRAM.
 
 ## Current scope
 
-This checkout contains so-vits-svc, Bark/optional Coqui TTS, dataset preparation, a Gradio interface, and CPU stem mixing/export. The Demucs/RVC `pipeline.py` and `test_sweep.py` described in an earlier handoff are **not present**. Their architecture and benchmarks have not been verified here.
+This checkout contains so-vits-svc, an isolated RVC adapter, Bark/optional Coqui TTS, dataset preparation, a Gradio interface, and CPU stem mixing/export. The Demucs/RVC `pipeline.py` and `test_sweep.py` described in an earlier handoff are **not present**. RVC is implemented through `rvc_adapter.py` and `rvc_worker.py`; the earlier handoff's benchmarks do not apply.
 
-See [MILESTONE_1_REPORT.md](MILESTONE_1_REPORT.md) for current TTS qualification and [AUDIT_REPORT.md](AUDIT_REPORT.md) for the earlier repository audit. English speech now has an isolated Bark path and an offline Windows fallback, with bounded generation and per-chunk validation. Custom voice conversion still requires its own RVC integration, trained checkpoint and representative audio validation.
+See [MILESTONE_1_REPORT.md](MILESTONE_1_REPORT.md) for TTS qualification, [MILESTONE_2_REPORT.md](MILESTONE_2_REPORT.md) for RVC/dataset readiness and [AUDIT_REPORT.md](AUDIT_REPORT.md) for the earlier audit. RVC runtime/assets and process safety are tested; real trained-voice conversion is **not yet qualified**, because no compatible trained RVC checkpoint is present. Full custom-voice training remains a separate milestone.
 
 The completed UI integration and latest verification are recorded in [INTEGRATION_REPORT.md](INTEGRATION_REPORT.md). Start `./venv310/Scripts/python.exe gradio_app.py` and open http://127.0.0.1:7860. Generate speech in the first tab, listen, then use **Use this speech for conversion** to populate the second tab. The UI defaults to the reliable offline Windows voice; the CLI retains its automatic Bark/fallback default. Cancel stops the session's active worker and waits for cleanup. Outputs are retained locally under `logs/app/`; diagnostic retention is optional.
 
@@ -61,7 +61,7 @@ speech = IsolatedSpeechGenerator().generate(
 # A future VoiceConverter adapter consumes speech.path (48 kHz PCM24 WAV).
 ```
 
-`SpeechGenerator`, `AudioValidator`, and `VoiceConverter` protocols live in `speech/contracts.py`. `conversion.SvcConverter` implements the conversion boundary for the existing so-vits backend, checks the persisted audio contract and publishes to a separate destination. RVC is not implemented by this milestone.
+`SpeechGenerator`, `AudioValidator`, and `VoiceConverter` protocols live in `speech/contracts.py`. `conversion.SvcConverter` and `rvc_adapter.RvcConverter` implement the conversion boundary for their respective backends, check the persisted audio contract and publish to a separate destination.
 
 For CPU ASR qualification, install `requirements-validation.txt` and download/extract the English `vosk-model-small-en-us-0.15` model linked in the milestone report. Runtime synthesis does not require Vosk.
 
@@ -91,6 +91,43 @@ Training requires separate recording groups, nonempty splits and at least 20 tra
 ```
 
 Open http://127.0.0.1:7860 and select a trained checkpoint with its matching configuration. The UI has no default checkpoint. The wrapper rejects `G_0.pth`, missing speakers and unsupported output formats. The CLI supports explicit `--input`, `--model`, `--config`, `--speaker`, `--transpose`, and `--f0-predictor` arguments through `voice_autopilot.py infer`.
+
+## RVC runtime and custom dataset
+
+```powershell
+./setup_rvc.ps1
+./venv-rvc/Scripts/python.exe -B rvc_runtime.py --health
+./venv310/Scripts/python.exe -B prepare_rvc_dataset.py --source Anshumaan_RVC.wav
+```
+
+RVC uses its own `venv-rvc` environment and a pinned official source checkout under ignored `vendor/rvc`. Setup pins Python 3.10, torch/torchaudio 2.1.0+cu121 and the inference-only dependency lock. A fresh install budgets approximately 8 GiB plus a 10 GiB free-space reserve; actual use depends on existing package caches. Windows fairseq installation may need MSVC build tools when no compatible cached wheel exists. The tested local wheel and isolated imports work on this laptop. Existing TTS packages are not replaced.
+
+`rvc_manifest.json` pins the source commit and the HuBERT/RMVPE assets to a specific upstream revision and LFS SHA256 digests. `restore_rvc.py` refuses unexpected local source changes. `download_rvc_assets.py` stages downloads, checks hashes and preserves mismatched existing assets for investigation. The reviewed upstream patch retains float decoder output until PCM24 storage and makes requested retrieval failures explicit; exact index matches cannot divide by zero.
+
+In the conversion tab select `rvc`, then a **trusted exported RVC inference checkpoint**. Checkpoints use executable PyTorch serialization; a so-vits or training-state checkpoint is a different format. No voice model is downloaded automatically. The feature index is optional at retrieval strength zero. Nonzero strength requires the selected readable L2 index with the model's matching feature width. Single-speaker models use speaker ID zero. Only RMVPE, Harvest and Parselmouth pitch methods are exposed for this backend.
+
+```python
+from pathlib import Path
+from rvc_adapter import RvcConverter, RvcOptions
+
+# speech is the SpeechResult returned by IsolatedSpeechGenerator.
+options = RvcOptions(model=str(Path("models/my_trusted_rvc.pth").resolve()))
+converted = RvcConverter(options, diagnostics="logs/rvc").convert(speech, Path("converted.wav"))
+```
+
+RVC loads in a contained child interpreter and holds the shared GPU lock through termination. Its explicit CUDA profile is fp16, `x_pad=1`, `x_query=5`, `x_center=30`, `x_max=32`, with the existing allocator ceiling. Five-second core segments retain context and 100 ms crossfades. The default request input limit is ten minutes (programmatically configurable up to one hour); startup/chunk/request deadlines are 180/120/900 seconds. CPU operation can be selected programmatically. These controls are not a substitute for real trained-model memory/quality qualification.
+
+Dataset preparation leaves source files unchanged and writes versioned PCM24/48 kHz clips plus manifests under ignored `datasets/rvc/anshumaan/`. Clips are 2–10 seconds, with VAD context, provenance, exclusions, review flags and exact duplicate checks. Preparation does not denoise or normalize clips. Repeating a completed preparation verifies hashes and reuses its version; interrupted builds are not published. `--source` can be repeated for separate recordings. With one recording, the temporal validation holdout is provisional and has a ten-second exclusion on each side of its boundary. It does not establish independent recording-session quality. The default 60-second usable-duration check is a local safety floor, not proof of enough training data.
+
+The current prepared dataset has 179 training clips (947.26 seconds) and 17 validation clips (97.003 seconds). Its exact source intervals and settings are in the local manifest linked from the milestone report. No training has started.
+
+Optional real asset probe, using an existing short speech WAV:
+
+```powershell
+./venv310/Scripts/python.exe -B qualify_rvc_runtime.py --audio logs/milestone1/verified-fallback.wav --output-dir logs/rvc-asset-probe-new
+```
+
+This probes the real encoder and pitch extractor only. It does not synthesize or qualify a target voice. Existing output directories are refused to preserve earlier evidence.
 
 The conversion tab accepts WAV/FLAC file uploads without audio-widget re-encoding, preserving PCM24 input bytes. Processing normalizes a copy and leaves the upload unchanged. Conversion inference has a 900-second default process deadline and the same Windows process-tree containment used by speech workers. A qualified trained checkpoint is still required to assess conversion quality.
 

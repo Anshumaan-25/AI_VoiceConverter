@@ -1,0 +1,54 @@
+{
+  "date": "2026-10-27",
+  "status": "implementation_and_dataset_complete_real_voice_qualification_blocked",
+  "source_commit": "7ef19867780cf703841ebafb565a4e47d1ea86ff",
+  "tests_passed": 51,
+  "gpu_lifecycle_tests_enabled": true,
+  "tts_health": "passed",
+  "rvc_health": "passed",
+  "source_recording_sha256": "c3cae9cd4b08709aa50ea1641519a4b1c9788264d1db7654110377fabd20035e",
+  "dataset_version": "0dddb82392f1860af8a3",
+  "dataset_summary": {
+    "train": {
+      "clips": 179,
+      "seconds": 947.2600000000006
+    },
+    "val": {
+      "clips": 17,
+      "seconds": 97.00331249999999
+    }
+  },
+  "dataset_all_clip_contracts_and_hashes_verified": true,
+  "split_quality": "provisional_same_session_temporal_holdout",
+  "asset_gpu_probe": {
+    "scope": "encoder_and_pitch_only_not_voice_conversion",
+    "feature_shape": [
+      1,
+      89,
+      768
+    ],
+    "pitch_frames": 181,
+    "voiced_frames": 136,
+    "peak_allocated_bytes": 545112576,
+    "peak_reserved_bytes": 572522496
+  },
+  "probe_process": {
+    "pid": 14228,
+    "elapsed_seconds": 9.577999999999975,
+    "peak_tree_rss_bytes": 2200932352,
+    "exited": true,
+    "returncode": 0
+  },
+  "live_ui": {
+    "rvc_missing_checkpoint": "Conversion failed: Select an existing trusted exported RVC .pth checkpoint",
+    "sapi_status": "Speech ready. Engine: sapi; chunks: 1.",
+    "sapi_audio_contract": "48000 PCM_24 mono"
+  },
+  "test_log_sha256": "09fd095f8ee60f9e6d2eccdb35ece2b2539af2be14d2ed0167ea68e8b94c40f2",
+  "owned_workers_remaining": [],
+  "pending": [
+    "compatible trained RVC checkpoint",
+    "real conversion/repeated synthesis memory and quality qualification",
+    "human recording/audio review"
+  ]
+}

@@ -68,3 +68,6 @@ Thumbs.db
 *.pt
 *.index
 *.backup-*/
+venv-rvc/
+vendor/
+datasets/

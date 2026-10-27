@@ -53,15 +53,29 @@ class VoiceApplication:
                                     diagnostics=str(run/'diagnostics') if diagnostics else None)
             return IsolatedSpeechGenerator().generate(text, run/'speech.wav', options, cancel)
 
-    def convert(self, session, source, model, config, speaker, transpose=0, f0_predictor='rmvpe'):
+    def convert(self, session, source, model, config, speaker, transpose=0, f0_predictor='rmvpe',
+                backend='so-vits-svc', index=None, index_rate=0, speaker_id=0):
         with self.jobs.start(session) as cancel:
+            if backend == 'rvc':
+                from rvc_adapter import RvcConverter,RvcOptions
+                if isinstance(transpose,bool) or not float(transpose).is_integer() or isinstance(speaker_id,bool) or not float(speaker_id).is_integer():
+                    raise ValueError('Pitch shift and speaker ID must be integers')
+                options = RvcOptions(str(model),str(index) if index else None,index_rate,
+                                     int(transpose),f0_predictor,int(speaker_id))
+                options.validate()
+                adapter = RvcConverter(options,cancel=cancel)
+                import soundfile as sf
+                if not .15 <= sf.info(str(source)).duration <= options.max_input_seconds:
+                    raise ValueError('RVC source duration is outside the request limit')
+            elif backend == 'so-vits-svc':
+                adapter = SvcConverter(Path(model),Path(config),speaker,int(transpose),f0_predictor,cancel=cancel)
+            else:
+                raise ValueError('Unknown voice conversion backend')
             run = self.output_root/uuid.uuid4().hex
             audio, sr = read_audio(source)
             normalized = run/'source.wav'
             write_wav(normalized, audio, sr)
             speech = SpeechResult(normalized, 'uploaded', [])
-            adapter = SvcConverter(Path(model), Path(config), speaker, int(transpose),
-                                   f0_predictor, cancel=cancel)
             try:
                 return adapter.convert(speech, run/'converted.wav')
             finally:

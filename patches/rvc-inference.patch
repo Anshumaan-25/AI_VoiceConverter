@@ -1,0 +1,59 @@
+diff --git a/infer/modules/vc/pipeline.py b/infer/modules/vc/pipeline.py
+index 9e3e387..efb031f 100644
+--- a/infer/modules/vc/pipeline.py
++++ b/infer/modules/vc/pipeline.py
+@@ -232,8 +232,10 @@ class Pipeline(object):
+             # _, I = index.search(npy, 1)
+             # npy = big_npy[I.squeeze()]
+ 
+-            score, ix = index.search(npy, k=8)
+-            weight = np.square(1 / score)
++            score, ix = index.search(npy, k=min(8, index.ntotal))
++            if not np.isfinite(score).all() or (ix < 0).any() or (ix >= len(big_npy)).any():
++                raise ValueError("Invalid retrieval neighbors or distances")
++            weight = np.square(1 / np.maximum(score, 1e-8))
+             weight /= weight.sum(axis=1, keepdims=True)
+             npy = np.sum(big_npy[ix] * np.expand_dims(weight, axis=2), axis=1)
+ 
+@@ -299,22 +301,12 @@ class Pipeline(object):
+         protect,
+         f0_file=None,
+     ):
+-        if (
+-            file_index != ""
+-            # and file_big_npy != ""
+-            # and os.path.exists(file_big_npy) == True
+-            and os.path.exists(file_index)
+-            and index_rate != 0
+-        ):
+-            try:
+-                index = faiss.read_index(file_index)
+-                # big_npy = np.load(file_big_npy)
+-                big_npy = index.reconstruct_n(0, index.ntotal)
+-            except:
+-                traceback.print_exc()
+-                index = big_npy = None
+-        else:
+-            index = big_npy = None
++        index = big_npy = None
++        if index_rate != 0:
++            index = getattr(self, "validated_index", None)
++            big_npy = getattr(self, "validated_vectors", None)
++            if index is None or big_npy is None:
++                raise ValueError("Requested retrieval index was not validated")
+         audio = signal.filtfilt(bh, ah, audio)
+         audio_pad = np.pad(audio, (self.window // 2, self.window // 2), mode="reflect")
+         opt_ts = []
+@@ -446,11 +438,7 @@ class Pipeline(object):
+             audio_opt = librosa.resample(
+                 audio_opt, orig_sr=tgt_sr, target_sr=resample_sr
+             )
+-        audio_max = np.abs(audio_opt).max() / 0.99
+-        max_int16 = 32768
+-        if audio_max > 1:
+-            max_int16 /= audio_max
+-        audio_opt = (audio_opt * max_int16).astype(np.int16)
++        audio_opt = audio_opt.astype(np.float32)  # Preserve decoder precision until PCM24 publication.
+         del pitch, pitchf, sid
+         if torch.cuda.is_available():
+             torch.cuda.empty_cache()
