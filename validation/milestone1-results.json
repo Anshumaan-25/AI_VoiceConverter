@@ -1,0 +1,214 @@
+{
+  "date": "2026-10-26",
+  "tests_passed": 28,
+  "gpu_lifecycle_enabled": true,
+  "benchmarks": {
+    "bark": {
+      "requests": 6,
+      "completed": 6,
+      "aggregate_wer_completed_requests": 0.05555555555555555,
+      "cases": [
+        {
+          "text": "Testing the audio pipeline.",
+          "status": "passed",
+          "transcript": "testing the audio pipeline",
+          "wer": 0.0,
+          "sha256": "01548761840886b34ef80e44c57f1350f9a1aed52ffa3449f29c7e2b0d18936e"
+        },
+        {
+          "text": "Hello, my name is David.",
+          "status": "passed",
+          "transcript": "hello my name is david",
+          "wer": 0.0,
+          "sha256": "b754b4125010effb2ce3febe5b1cdf2e81541c214818fd4cd655dbffa090dbfa"
+        },
+        {
+          "text": "Please close the window before you leave the room.",
+          "status": "passed",
+          "transcript": "please close the window before you leave the room ah",
+          "wer": 0.1111111111111111,
+          "sha256": "4fb8a734059a1576f9697d1080ed530c9c1691f472ebfd6ab87df74688b027de"
+        },
+        {
+          "text": "We can hear every word clearly, even at the end of the sentence.",
+          "status": "passed",
+          "transcript": "we can hear every word clearly even at the end of the sentence",
+          "wer": 0.0,
+          "sha256": "2585dfc3f4613f2a7f4c7a77ac4fea113899469b33d543e1c02a8c001f5c030f"
+        },
+        {
+          "text": "The small brown dog walked across the quiet garden.",
+          "status": "passed",
+          "transcript": "the small brown dog walked across the pie a garden",
+          "wer": 0.2222222222222222,
+          "sha256": "ac9bdbb93ba8bd26ebff5f9f8101a2e03d9706649f3349bfc10693054afbc98f"
+        },
+        {
+          "text": "Good morning! Are you ready? Let us begin the next part of our project.",
+          "status": "passed",
+          "transcript": "good morning are you ready let us begin the next part of our project",
+          "wer": 0.0,
+          "sha256": "486bb44c6ef2520198a5f451d229f239dfedc78583089f1939ab80a34a6e5bf1"
+        }
+      ]
+    },
+    "coqui": {
+      "requests": 6,
+      "completed": 5,
+      "aggregate_wer_completed_requests": 0.0,
+      "cases": [
+        {
+          "text": "Testing the audio pipeline.",
+          "status": "failed",
+          "error": "No speech backend completed within the request budget: coqui: Coqui decoder reached its hard step limit before completing speech"
+        },
+        {
+          "text": "Hello, my name is David.",
+          "status": "passed",
+          "transcript": "hello my name is david",
+          "wer": 0.0,
+          "sha256": "eda88712bde431cdef393c487c2412d6e926481c90065e4898cbcfc295383a88"
+        },
+        {
+          "text": "Please close the window before you leave the room.",
+          "status": "passed",
+          "transcript": "please close the window before you leave the room",
+          "wer": 0.0,
+          "sha256": "861f1aed28dfb50d5f354617c51a2e207d9cf251d5efcb66ee633a87e59fe62a"
+        },
+        {
+          "text": "We can hear every word clearly, even at the end of the sentence.",
+          "status": "passed",
+          "transcript": "we can hear every word clearly even at the end of the sentence",
+          "wer": 0.0,
+          "sha256": "7e8c16abd1b5ef7a22a72a65d48d80b527573ceb9f9854686e2ecfb83dda9c7d"
+        },
+        {
+          "text": "The small brown dog walked across the quiet garden.",
+          "status": "passed",
+          "transcript": "the small brown dog walked across the quiet garden",
+          "wer": 0.0,
+          "sha256": "18b4e4fdbe9a27cc784d85f485b9fbb94e15911b79e2a20e35ebb505627c1b1d"
+        },
+        {
+          "text": "Good morning! Are you ready? Let us begin the next part of our project.",
+          "status": "passed",
+          "transcript": "good morning are you ready let us begin the next part of our project",
+          "wer": 0.0,
+          "sha256": "0923e9e29b94ae4a22afd7b9fe346a6d0fa940907154eea4cceed072046fa510"
+        }
+      ]
+    },
+    "sapi": {
+      "requests": 12,
+      "completed": 12,
+      "aggregate_wer_completed_requests": 0.018518518518518517,
+      "cases": [
+        {
+          "text": "Testing the audio pipeline.",
+          "status": "passed",
+          "transcript": "testing the audio pipeline",
+          "wer": 0.0,
+          "sha256": "ff24c5ab57ac4679c45071f5221046da6737b5d9f0525e58015e8320d47d6811"
+        },
+        {
+          "text": "Hello, my name is David.",
+          "status": "passed",
+          "transcript": "hello my name is david",
+          "wer": 0.0,
+          "sha256": "3780835253b6c522ad0b666992d6ec4ecd4133c7aa647d2ae242308b25039c61"
+        },
+        {
+          "text": "Please close the window before you leave the room.",
+          "status": "passed",
+          "transcript": "please close the window before you leave the room",
+          "wer": 0.0,
+          "sha256": "82c75f500eac6c1e3b4a288f7841937c4aae6d6d2ca9b32e8c5780c66eb5081e"
+        },
+        {
+          "text": "We can hear every word clearly, even at the end of the sentence.",
+          "status": "passed",
+          "transcript": "we can hear every word clearly even at the end of the sentence",
+          "wer": 0.0,
+          "sha256": "0b41ca871a1fe4b140a480c138e3dcad919d33d8507950b16e78198361214f13"
+        },
+        {
+          "text": "The small brown dog walked across the quiet garden.",
+          "status": "passed",
+          "transcript": "the small brown dog walked across the quiet garden",
+          "wer": 0.0,
+          "sha256": "4181058951b142bd2ce92acaf835a2bb0cdedc00dcab85ea35952fbd789826cb"
+        },
+        {
+          "text": "Good morning! Are you ready? Let us begin the next part of our project.",
+          "status": "passed",
+          "transcript": "good morning are you reading let us begin the next part of our project",
+          "wer": 0.07142857142857142,
+          "sha256": "5d544acf814d78462cd112d821536250d3e6ac69d1ae7504ba55449aca0a83e2"
+        },
+        {
+          "text": "Testing the audio pipeline.",
+          "status": "passed",
+          "transcript": "testing the audio pipeline",
+          "wer": 0.0,
+          "sha256": "ff24c5ab57ac4679c45071f5221046da6737b5d9f0525e58015e8320d47d6811"
+        },
+        {
+          "text": "Hello, my name is David.",
+          "status": "passed",
+          "transcript": "hello my name is david",
+          "wer": 0.0,
+          "sha256": "3780835253b6c522ad0b666992d6ec4ecd4133c7aa647d2ae242308b25039c61"
+        },
+        {
+          "text": "Please close the window before you leave the room.",
+          "status": "passed",
+          "transcript": "please close the window before you leave the room",
+          "wer": 0.0,
+          "sha256": "82c75f500eac6c1e3b4a288f7841937c4aae6d6d2ca9b32e8c5780c66eb5081e"
+        },
+        {
+          "text": "We can hear every word clearly, even at the end of the sentence.",
+          "status": "passed",
+          "transcript": "we can hear every word clearly even at the end of the sentence",
+          "wer": 0.0,
+          "sha256": "0b41ca871a1fe4b140a480c138e3dcad919d33d8507950b16e78198361214f13"
+        },
+        {
+          "text": "The small brown dog walked across the quiet garden.",
+          "status": "passed",
+          "transcript": "the small brown dog walked across the quiet garden",
+          "wer": 0.0,
+          "sha256": "4181058951b142bd2ce92acaf835a2bb0cdedc00dcab85ea35952fbd789826cb"
+        },
+        {
+          "text": "Good morning! Are you ready? Let us begin the next part of our project.",
+          "status": "passed",
+          "transcript": "good morning are you reading let us begin the next part of our project",
+          "wer": 0.07142857142857142,
+          "sha256": "5d544acf814d78462cd112d821536250d3e6ac69d1ae7504ba55449aca0a83e2"
+        }
+      ]
+    }
+  },
+  "final_transcripts": [
+    {
+      "file": "verified-fallback.wav",
+      "expected": "Testing the audio pipeline.",
+      "transcript": "testing the audio pipeline",
+      "wer": 0.0,
+      "errors": 0,
+      "words": 4
+    },
+    {
+      "file": "ready-for-review.wav",
+      "expected": "Please close the window before you leave the room. We can hear every word clearly, even at the end of the sentence. The small brown dog walked across the quiet garden.",
+      "transcript": "please close the window before you leave the room ah ah we can hear every word clearly even at the end of the sentence the small brown dog i walked across the quiet garden",
+      "wer": 0.0967741935483871,
+      "errors": 3,
+      "words": 31
+    }
+  ],
+  "protected_recording_sha256": "c3cae9cd4b08709aa50ea1641519a4b1c9788264d1db7654110377fabd20035e",
+  "vosk_archive_sha256": "30f26242c4eb449f948e42cb302dd7a686cb29a3423a8367f99ff41780942498"
+}

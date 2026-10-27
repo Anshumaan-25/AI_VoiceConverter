@@ -194,22 +194,40 @@ def _ensure_paths() -> None:
         raise FileNotFoundError(f"Missing so-vits repository at: {SVC_DIR}")
 
 
-def run_cmd(args: List[str], cwd: Path | None = None, env: dict[str, str] | None = None) -> None:
+def run_cmd(args: List[str], cwd: Path | None = None, env: dict[str, str] | None = None,
+            timeout: float = 86400, cancel=None) -> None:
+    import math
+    from speech.processes import ProcessTree
+    if not math.isfinite(timeout) or timeout <= 0:
+        raise ValueError('Command timeout must be finite and positive')
+    if cancel is not None and cancel.is_set():
+        raise RuntimeError('Conversion cancelled')
     print("[cmd]", " ".join(args))
     merged_env = None
     if env:
         merged_env = dict(os.environ)
         merged_env.update(env)
-    process = subprocess.Popen(args, cwd=cwd, env=merged_env)
+    flags = (subprocess.CREATE_NO_WINDOW | 0x00000004) if os.name == 'nt' else 0
+    process = subprocess.Popen(args, cwd=cwd, env=merged_env, creationflags=flags,
+                               start_new_session=os.name != 'nt')
+    tree = None
     try:
-        code = process.wait(timeout=86400)
-    except BaseException:
-        if os.name == "nt":
-            subprocess.run(["taskkill", "/PID", str(process.pid), "/T", "/F"], capture_output=True)
-        else:
+        tree = ProcessTree(process)
+        tree.resume()
+        deadline = time.monotonic()+timeout
+        while process.poll() is None:
+            if cancel is not None and cancel.is_set():
+                raise RuntimeError('Conversion cancelled')
+            if time.monotonic() >= deadline:
+                raise subprocess.TimeoutExpired(args, timeout)
+            time.sleep(.05)
+        code = process.returncode
+    finally:
+        if tree is not None:
+            tree.close()
+        elif process.poll() is None:
             process.kill()
-        process.wait()
-        raise
+            process.wait(timeout=10)
     result = subprocess.CompletedProcess(args, code)
     if result.returncode != 0:
         raise RuntimeError(f"Command failed ({result.returncode}): {' '.join(args)}")
@@ -672,6 +690,8 @@ def infer_once(
     transpose: int = 0,
     f0_predictor: str = "rmvpe",
     wav_format: str = "wav",
+    timeout: float = 900,
+    cancel=None,
 ) -> Path:
     _ensure_paths()
     if not ffmpeg_exists():
@@ -704,10 +724,14 @@ def infer_once(
         with gpu_job():
             run_cmd([_python_bin(), "inference_main.py", "-m", str(model_path), "-c", str(config_path),
                      "-n", raw_name, "-t", str(transpose), "-s", speaker, "-f0p", f0_predictor,
-                     "-wf", "wav", "-cl", "5"], cwd=SVC_DIR)
+                     "-wf", "wav", "-cl", "5"], cwd=SVC_DIR, timeout=timeout, cancel=cancel)
         candidates = list((SVC_DIR / "results").glob(f"{raw_name}_*"))
         if len(candidates) != 1:
             raise RuntimeError("Inference did not produce exactly one output")
+        import soundfile as sf
+        info = sf.info(str(candidates[0]))
+        if (info.samplerate, info.subtype, info.channels) != (48000, 'PCM_24', 1):
+            raise RuntimeError('Conversion output violates the 48 kHz PCM24 mono contract')
         read_audio(candidates[0])
         return candidates[0]
     finally:

@@ -9,52 +9,19 @@ from unittest.mock import patch
 import numpy as np
 import soundfile as sf
 import audio_io
-import tts_engine as tts
 from dataset_tools import prepare_clips, validate_training_data
 
 ROOT = Path(__file__).resolve().parents[1]
 
 class AudioSafetyTests(unittest.TestCase):
-    def test_trim_long_silence_and_reject_empty(self):
+    def test_trim_keeps_padding_and_rejects_silence(self):
+        from speech.validation import finish_chunk
+        from speech.contracts import SpeechError
         signal = np.r_[np.full(24000, .2), np.zeros(72000)].astype(np.float32)
-        self.assertLess(len(tts.trim_audio_edges(signal, 24000)), 25000)
-        self.assertEqual(tts.trim_audio_edges(np.zeros(24000), 24000).size, 0)
-        with self.assertRaises(tts.TTSError):
-            tts.normalize_peak_db(np.array([]))
-
-    def test_text_retains_pauses_and_unicode(self):
-        text = "Hello, world! नमस्ते. Another sentence."
-        chunks = tts.chunk_text_by_words(text)
-        self.assertEqual(" ".join(chunks), text)
-        self.assertEqual(len(chunks), 3)
-        with self.assertRaises(ValueError):
-            tts.chunk_text_by_words(text, 0)
-
-    def test_sustained_carrier_rejected_but_brief_tone_allowed(self):
-        sr = 24000
-        tone = .2 * np.sin(2*np.pi*625*np.arange(sr*4)/sr)
-        with self.assertRaisesRegex(tts.TTSError, "sustained"):
-            tts.validate_generated_speech(tone, sr)
-        tts.validate_generated_speech(tone[:sr], sr)
-        tts.validate_generated_speech(np.random.default_rng(42).normal(0,.1,sr*4), sr)
-
-    def test_decoder_runaway_rejected(self):
-        with self.assertRaisesRegex(tts.TTSError, "exceeded"):
-            tts.validate_speech_duration(np.zeros(48000*85), 48000, "Testing the audio pipeline.")
-        tts.validate_speech_duration(np.zeros(48000*3), 48000, "Testing the audio pipeline.")
-
-    def test_auto_falls_back_after_bark_quality_failure(self):
-        import sys
-        with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "fallback.wav"
-            with patch.object(sys, "argv", ["tts_engine.py", "--text", "Hello.", "--output", str(path)]):
-                args = tts.parse_args()
-            with patch.object(tts, "synthesize_with_bark", side_effect=tts.TTSError("Rejected carrier tone")), \
-                 patch.object(tts, "synthesize_with_coqui", return_value=(np.ones(24000)*.1, 24000)) as fallback:
-                result = tts.run_tts(args)
-            fallback.assert_called_once()
-            self.assertEqual(result, path.resolve())
-            self.assertEqual(sf.info(str(path)).subtype, "PCM_24")
+        trimmed = finish_chunk(signal, 24000)
+        self.assertTrue(24000 <= len(trimmed) <= 27000)
+        with self.assertRaises(SpeechError):
+            finish_chunk(np.zeros(24000), 24000)
 
     def test_path_escape_and_reserved_names(self):
         for name in ("..", "../other", "C:\\other", "CON", "a/b", ""):
@@ -131,7 +98,7 @@ class AudioSafetyTests(unittest.TestCase):
                 validate_training_data(root)
 
     def test_no_python_syntax_regressions(self):
-        paths = list(ROOT.glob("*.py")) + list((ROOT / "so-vits-svc").rglob("*.py"))
+        paths = list(ROOT.glob("*.py")) + list((ROOT / "speech").rglob("*.py")) + list((ROOT / "so-vits-svc").rglob("*.py"))
         for path in paths:
             with self.subTest(path=path):
                 ast.parse(path.read_text(encoding="utf-8-sig"))

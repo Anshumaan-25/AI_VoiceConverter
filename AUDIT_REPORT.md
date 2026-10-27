@@ -1,5 +1,7 @@
 # Repository audit and repair report
 
+Historical audit from October 23. For the subsequent isolated TTS implementation, revised generation settings and current qualification results, see [MILESTONE_1_REPORT.md](MILESTONE_1_REPORT.md). Line references below describe the audit revision.
+
 Date: 2026-10-23. Scope: root scripts and the local so-vits-svc checkout, dependency metadata, configurations, dataset headers, training logs, CPU regressions and selected GPU inference. The initial scan parsed 131 Python files. No Demucs/RVC pipeline.py or test_sweep.py exists here. Generated models/recordings were not replaced.
 
 ## 1. Critical bugs / execution risks

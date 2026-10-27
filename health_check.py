@@ -7,7 +7,7 @@ def check():
     failures = []
     if sys.version_info[:2] != (3, 10):
         failures.append("Python 3.10 is required")
-    for module in ("torch", "torchaudio", "numpy", "scipy", "soundfile", "gradio", "bark", "fairseq", "pyworld", "torchcrepe", "librosa", "faiss"):
+    for module in ("torch", "torchaudio", "numpy", "scipy", "soundfile", "gradio", "fastapi", "starlette", "bark", "fairseq", "pyworld", "torchcrepe", "librosa", "faiss", "webrtcvad", "psutil"):
         try:
             imported = importlib.import_module(module)
             print(f"{module}: {getattr(imported, '__version__', 'import OK')}")
@@ -24,6 +24,16 @@ def check():
     except Exception as exc:
         failures.append(str(exc))
     from voice_autopilot import resolve_ffmpeg_bin
+    try:
+        from starlette.testclient import TestClient
+        from gradio_app import build_ui
+        app = build_ui()
+        with TestClient(app.app) as client:
+            response = client.get('/')
+            if response.status_code != 200:
+                failures.append(f"UI page returned HTTP {response.status_code}")
+    except Exception as exc:
+        failures.append(f"UI rendering: {type(exc).__name__}: {exc}")
     ffmpeg = resolve_ffmpeg_bin()
     if not ffmpeg:
         failures.append("FFmpeg is unavailable")

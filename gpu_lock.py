@@ -3,6 +3,10 @@ from contextlib import contextmanager
 from pathlib import Path
 import tempfile
 
+
+class GpuBusyError(RuntimeError):
+    """A supported GPU job already owns this workstation's accelerator."""
+
 @contextmanager
 def gpu_job():
     import msvcrt
@@ -16,7 +20,7 @@ def gpu_job():
         try:
             msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
         except OSError as exc:
-            raise RuntimeError("Another voice-processing job is using the GPU") from exc
+            raise GpuBusyError("Another voice-processing job is using the GPU") from exc
         try:
             yield
         finally:
