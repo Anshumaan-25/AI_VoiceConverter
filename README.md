@@ -8,7 +8,7 @@ This checkout contains so-vits-svc, an isolated RVC adapter, Bark/optional Coqui
 
 Current direction: **Suno vocal stem → RVC target voice → mix with the original instrumental**. Bark is parked indefinitely and disabled in automatic/explicit speech generation. Optional speech generation uses Windows SAPI.
 
-See [RVC_RECOVERY_REPORT.md](RVC_RECOVERY_REPORT.md) for the current recovery and song-demo status. The historical reports remain: [Milestone 1](MILESTONE_1_REPORT.md), [Milestone 2](MILESTONE_2_REPORT.md), [Milestone 3](MILESTONE_3_REPORT.md) and the [earlier audit](AUDIT_REPORT.md). A BF16 recovery run completed 500 new finite paired updates from the intact step-200 checkpoint, reaching step 700. The original FP16 failure was not reproduced by an instrumented 80-update replay; its exact cause remains unproven. Voice similarity and singing quality require listening.
+See [SUNO_DEMO_REPORT.md](SUNO_DEMO_REPORT.md) for the completed 30-second real song separation/conversion/mix and [RVC_RECOVERY_REPORT.md](RVC_RECOVERY_REPORT.md) for recovery evidence. The historical reports remain: [Milestone 1](MILESTONE_1_REPORT.md), [Milestone 2](MILESTONE_2_REPORT.md), [Milestone 3](MILESTONE_3_REPORT.md) and the [earlier audit](AUDIT_REPORT.md). A BF16 recovery run completed 500 new finite paired updates from the intact step-200 checkpoint, reaching step 700. The original FP16 failure was not reproduced by an instrumented 80-update replay; its exact cause remains unproven. Voice similarity and singing quality require listening.
 
 The completed UI integration and latest verification are recorded in [INTEGRATION_REPORT.md](INTEGRATION_REPORT.md). Start `./venv310/Scripts/python.exe gradio_app.py` and open http://127.0.0.1:7860. Generate speech in the first tab, listen, then use **Use this speech for conversion** to populate the second tab. The UI defaults to the reliable offline Windows voice; the CLI retains its automatic Bark/fallback default. Cancel stops the session's active worker and waits for cleanup. Outputs are retained locally under `logs/app/`; diagnostic retention is optional.
 
@@ -144,6 +144,8 @@ For a newly reviewed pilot, the entry points are:
 `qualify_rvc_model.py` supplies engineering qualification: a training-only bounded L2 index, repeated real conversions, ASR comparisons, cancellation/deadline checks and queued UI playback/download checks. It requires the existing optional local Vosk model for ASR. Current results and listening pairs are recorded in the recovery report.
 
 ### 30-second song demonstration
+
+The first real demonstration is complete for `VocalMixer/input_songs/tragic.mp3`, interval 11.8–41.8 seconds. Its fresh full stems, mono vocal excerpt and stereo accompaniment are in `logs/suno-tragic-20261028/separation/`; the comparison and converted mixes are in `logs/suno-tragic-20261028/custom-voice-demo/`. These media remain local and ignored. See the song report for provenance, measurements and listening filenames.
 
 Supply matching Suno vocal and instrumental stems from the same song/export, with a shared timeline. Originals remain unchanged. The command prepares the same 30-second interval from each, converts the mono vocal, preserves the instrumental channels, and publishes an original comparison mix, converted vocal, stereo PCM24/48 kHz master and final 320 kbps MP3:
 

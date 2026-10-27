@@ -1,5 +1,7 @@
 # Numerical recovery and 30-second song demonstration
 
+Status: completed through the real song demonstration on 2026-10-28. See `RVC_RECOVERY_REPORT.md` and `SUNO_DEMO_REPORT.md`; human listening remains pending.
+
 Authorized by the user's explicit request to fix training, park Bark indefinitely and convert/mix a Suno stem. This supersedes the previous instruction to stop pending a new recovery plan; it does not erase the failed run or its budget.
 
 1. Preserve the Milestone 3 dataset, features, failure evidence and step-200 checkpoint. Replay from that checkpoint with finite-value checks inside the generator/discriminator, limited to 80 attempts / 300 worker seconds. Record the first failing operation before selecting a precision change. No Bark generation or tuning.

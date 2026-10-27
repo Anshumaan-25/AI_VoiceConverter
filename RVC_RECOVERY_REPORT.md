@@ -2,6 +2,8 @@
 
 Date: 2026-10-27. Branch: `bark-chunk-and-stitch`.
 
+**Follow-up, 2026-10-28:** The user identified VocalMixer. Fresh full-track separation and the real 30-second custom-voice mix are now complete; see `SUNO_DEMO_REPORT.md`. The missing-input descriptions below record the original recovery delivery state.
+
 **Bark is parked indefinitely. A bounded BF16 training recovery and real RVC speech conversion now pass. The requested 30-second Suno song has not been rendered because no confirmed Suno vocal/instrumental files were supplied.** The final mix workflow is implemented and tested; provide the local stem paths to run it. No unidentified old song was substituted.
 
 ## Numerical investigation and recovery
