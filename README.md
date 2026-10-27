@@ -6,7 +6,7 @@ Windows/Python 3.10 tools for speech generation, so-vits-svc and isolated RVC vo
 
 This checkout contains so-vits-svc, an isolated RVC adapter, Bark/optional Coqui TTS, dataset preparation, a Gradio interface, and CPU stem mixing/export. The Demucs/RVC `pipeline.py` and `test_sweep.py` described in an earlier handoff are **not present**. RVC is implemented through `rvc_adapter.py` and `rvc_worker.py`; the earlier handoff's benchmarks do not apply.
 
-See [MILESTONE_1_REPORT.md](MILESTONE_1_REPORT.md) for TTS qualification, [MILESTONE_2_REPORT.md](MILESTONE_2_REPORT.md) for RVC/dataset readiness and [AUDIT_REPORT.md](AUDIT_REPORT.md) for the earlier audit. RVC runtime/assets and process safety are tested; real trained-voice conversion is **not yet qualified**, because no compatible trained RVC checkpoint is present. Full custom-voice training remains a separate milestone.
+See [MILESTONE_1_REPORT.md](MILESTONE_1_REPORT.md) for TTS qualification, [MILESTONE_2_REPORT.md](MILESTONE_2_REPORT.md) for RVC/dataset readiness, [MILESTONE_3_REPORT.md](MILESTONE_3_REPORT.md) for the bounded training pilot and [AUDIT_REPORT.md](AUDIT_REPORT.md) for the earlier audit. RVC runtime/assets and process safety are tested. The pilot stopped on a nonfinite loss after 239 successful paired updates; its last complete checkpoint is step 200. Real trained-voice conversion and acoustic quality remain **unqualified**. Further training is blocked pending numerical diagnosis.
 
 The completed UI integration and latest verification are recorded in [INTEGRATION_REPORT.md](INTEGRATION_REPORT.md). Start `./venv310/Scripts/python.exe gradio_app.py` and open http://127.0.0.1:7860. Generate speech in the first tab, listen, then use **Use this speech for conversion** to populate the second tab. The UI defaults to the reliable offline Windows voice; the CLI retains its automatic Bark/fallback default. Cancel stops the session's active worker and waits for cleanup. Outputs are retained locally under `logs/app/`; diagnostic retention is optional.
 
@@ -119,7 +119,27 @@ RVC loads in a contained child interpreter and holds the shared GPU lock through
 
 Dataset preparation leaves source files unchanged and writes versioned PCM24/48 kHz clips plus manifests under ignored `datasets/rvc/anshumaan/`. Clips are 2–10 seconds, with VAD context, provenance, exclusions, review flags and exact duplicate checks. Preparation does not denoise or normalize clips. Repeating a completed preparation verifies hashes and reuses its version; interrupted builds are not published. `--source` can be repeated for separate recordings. With one recording, the temporal validation holdout is provisional and has a ten-second exclusion on each side of its boundary. It does not establish independent recording-session quality. The default 60-second usable-duration check is a local safety floor, not proof of enough training data.
 
-The current prepared dataset has 179 training clips (947.26 seconds) and 17 validation clips (97.003 seconds). Its exact source intervals and settings are in the local manifest linked from the milestone report. No training has started.
+The current prepared dataset has 179 training clips (947.26 seconds) and 17 validation clips (97.003 seconds). Its exact source intervals and settings are in the local manifest linked from the milestone report. All 196 clips now have verified, split-isolated content/pitch arrays for the bounded pilot; original WAV files remain unchanged.
+
+### Bounded RVC training pilot
+
+The supported pilot reuses pinned RVC networks/losses in `rvc_training_worker.py`, with float PCM24 loading, explicit frame alignment, batch size 1, AMP, no GPU dataset cache and no data-loader child workers. It does not invoke the upstream DDP/TensorBoard trainer. No additional training packages were required. Optional TensorBoard messages from fairseq remain informational.
+
+For a newly reviewed pilot, the entry points are:
+
+```powershell
+./venv310/Scripts/python.exe -B download_rvc_assets.py --training
+./venv310/Scripts/python.exe -B prepare_rvc_training.py
+./venv310/Scripts/python.exe -B train_rvc.py --stage smoke
+./venv310/Scripts/python.exe -B train_rvc.py --stage resume
+./venv310/Scripts/python.exe -B train_rvc.py --stage pilot
+```
+
+`setup_rvc.ps1 -TrainingAssets` also downloads the hash-verified v2 48 kHz generator/discriminator pair. Training configuration is `configs/rvc_pilot.json`. Across stages the controller permits at most 500 attempted steps and 1800 seconds; a durable reservation prevents a controller crash from resetting the allowance. Actual optimizer updates, skipped updates, losses, sample order and GPU memory are recorded. Complete resume sets contain both networks, optimizer/scheduler/scaler/RNG state and sample position. Interrupted writes never replace the last complete set; two complete sets are retained.
+
+**The current workspace is stopped at a failed safety gate.** Repeating training or `qualify_rvc_model.py` is explicitly rejected. Do not delete/reset its budget or change workspaces to bypass the stop. The existing step-9 inference export predates the failure and is an unqualified diagnostic artifact. Step 200 was verified on CPU after the failure and was not resumed or promoted to an inference export. See the Milestone 3 report for the next numerical investigation and retained evidence.
+
+`qualify_rvc_model.py` supplies the later engineering qualification workflow: a training-only bounded L2 index, repeated real conversions, ASR comparisons, cancellation/deadline checks and queued UI playback/download checks. Its full model workflow remains unexecuted because the training gate failed; it requires the existing optional local Vosk model for ASR. No custom-voice listening pairs were generated in this milestone.
 
 Optional real asset probe, using an existing short speech WAV:
 

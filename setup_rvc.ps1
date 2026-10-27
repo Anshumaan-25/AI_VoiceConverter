@@ -1,4 +1,4 @@
-param([string]$PythonExe = '', [switch]$SkipAssets)
+param([string]$PythonExe = '', [switch]$SkipAssets, [switch]$TrainingAssets)
 $ErrorActionPreference = 'Stop'
 Set-Location -LiteralPath $PSScriptRoot
 function Invoke-Checked {
@@ -16,5 +16,8 @@ Invoke-Checked $RvcPython @('-m','pip','install','pip==24.0','setuptools==80.9.0
 Invoke-Checked $RvcPython @('-m','pip','install','torch==2.1.0+cu121','torchaudio==2.1.0+cu121','--index-url','https://download.pytorch.org/whl/cu121')
 Invoke-Checked $RvcPython @('-m','pip','install','-r','requirements-rvc.txt','-c','requirements-rvc-lock.txt')
 Invoke-Checked $RvcPython @('-B','restore_rvc.py')
-if (-not $SkipAssets) { Invoke-Checked $RvcPython @('-B','download_rvc_assets.py') }
+if (-not $SkipAssets) {
+    if ($TrainingAssets) { Invoke-Checked $RvcPython @('-B','download_rvc_assets.py','--training') }
+    else { Invoke-Checked $RvcPython @('-B','download_rvc_assets.py') }
+}
 Invoke-Checked $RvcPython @('-B','rvc_runtime.py','--health')

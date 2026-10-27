@@ -18,9 +18,12 @@ def sha256(path):
     return digest.hexdigest()
 
 
-def download():
+def download(training=False):
     manifest = json.loads((ROOT/'rvc_manifest.json').read_text(encoding='utf-8'))
-    for asset in manifest['assets'].values():
+    assets = dict(manifest['assets'])
+    if training:
+        assets.update(manifest['training_assets'])
+    for asset in assets.values():
         target = ROOT/'vendor'/'rvc'/asset['file']
         if target.exists():
             if target.stat().st_size != asset['bytes'] or sha256(target) != asset['sha256']:
@@ -59,4 +62,7 @@ def download():
 
 
 if __name__ == '__main__':
-    download()
+    import argparse
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--training',action='store_true',help='Also verify/download the pinned v2 48 kHz G/D pair')
+    download(parser.parse_args().training)

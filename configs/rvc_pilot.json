@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "version": "v2",
+  "sample_rate": 48000,
+  "f0": 1,
+  "batch_size": 1,
+  "segment_size": 17280,
+  "seed": 1234,
+  "max_steps": 500,
+  "max_seconds": 1800,
+  "smoke_steps": 10,
+  "smoke_seconds": 300,
+  "save_every": 100,
+  "step_timeout": 120,
+  "grace_seconds": 20,
+  "max_consecutive_skips": 8
+}

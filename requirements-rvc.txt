@@ -1,4 +1,5 @@
-# Inference only. Install pinned CUDA torch/torchaudio separately.
+# Inference and bounded pilot loop. Install pinned CUDA torch/torchaudio separately.
+# Pilot logs JSON directly; upstream TensorBoard/DDP trainer is not invoked.
 numpy==1.23.5
 scipy==1.11.4
 soundfile==0.13.1

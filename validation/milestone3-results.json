@@ -1,0 +1,186 @@
+{
+  "schema": 1,
+  "date": "2026-10-27",
+  "status": "partial_safety_stop",
+  "gates": {
+    "A": "passed",
+    "B": "passed",
+    "C": "nonfinite_loss_stop_after_smoke_and_resume_pass",
+    "D": "blocked"
+  },
+  "source_sha256": "c3cae9cd4b08709aa50ea1641519a4b1c9788264d1db7654110377fabd20035e",
+  "dataset_version": "0dddb82392f1860af8a3",
+  "dataset_counts": {
+    "train": 179,
+    "val": 17
+  },
+  "features_manifest_sha256": "31d8f94e3ca0e2330e8429e6567ab9454304adbef701b138608c3374d24dd3a3",
+  "tests": {
+    "passed": 64,
+    "VOICE_TEST_GPU": 1,
+    "log_sha256": "9a26aa7c5eca761c6ff08b4050328a621dc7b9a5dd9d65af30decc4d6dd3e3b9"
+  },
+  "health": {
+    "tts": {
+      "status": "passed",
+      "log_sha256": "8104c6722d9d25ac7aa9fbed290311b80dc4becf9f427d970b8aabf9c65bb6ac"
+    },
+    "rvc": {
+      "status": "passed",
+      "log_sha256": "6d977d889c2ca5d4a314f638b91b74594d785979abad4e2faed289c871d89056"
+    }
+  },
+  "training": {
+    "attempted_steps": 245,
+    "successful_paired_updates": 239,
+    "worker_seconds": 170.781,
+    "step_limit": 500,
+    "seconds_limit": 1800,
+    "peak_allocated_bytes": 2848023552,
+    "peak_reserved_bytes": 3107979264,
+    "peak_sampled_device_mib": 3093,
+    "stages": [
+      {
+        "stage": "smoke",
+        "attempted_steps": 10,
+        "seconds": 19.125,
+        "error": null
+      },
+      {
+        "stage": "resume",
+        "attempted_steps": 1,
+        "seconds": 16.453,
+        "error": null
+      },
+      {
+        "stage": "pilot",
+        "attempted_steps": 234,
+        "seconds": 135.203,
+        "error": "Nonfinite discriminator loss"
+      }
+    ],
+    "all_training_workers_exited": true,
+    "all_after_gpu_mib": [
+      0,
+      0,
+      0
+    ]
+  },
+  "failure": {
+    "message": "Nonfinite discriminator loss",
+    "last_complete_checkpoint": {
+      "status": "complete",
+      "file": "state.pth",
+      "step": 200,
+      "identity": {
+        "features_sha256": "31d8f94e3ca0e2330e8429e6567ab9454304adbef701b138608c3374d24dd3a3",
+        "config": {
+          "schema": 1,
+          "version": "v2",
+          "sample_rate": 48000,
+          "f0": 1,
+          "batch_size": 1,
+          "segment_size": 17280,
+          "seed": 1234,
+          "max_steps": 500,
+          "max_seconds": 1800,
+          "smoke_steps": 10,
+          "smoke_seconds": 300,
+          "save_every": 100,
+          "step_timeout": 120,
+          "grace_seconds": 20,
+          "max_consecutive_skips": 8
+        },
+        "training_assets": {
+          "generator": {
+            "file": "assets/pretrained_v2/f0G48k.pth",
+            "remote": "pretrained_v2/f0G48k.pth",
+            "bytes": 75465569,
+            "sha256": "b5d51f589cc3632d4eae36a315b4179397695042edc01d15312e1bddc2b764a4"
+          },
+          "discriminator": {
+            "file": "assets/pretrained_v2/f0D48k.pth",
+            "remote": "pretrained_v2/f0D48k.pth",
+            "bytes": 142875703,
+            "sha256": "2269b73c7a4cf34da09aea99274dabf99b2ddb8a42cbfb065fb3c0aa9a2fc748"
+          }
+        },
+        "worker_sha256": "57170d055adf2fd22da5ba3d3584325873f2bc1797f7f592728c9b4c87c0f42f",
+        "source_commit": "7ef19867780cf703841ebafb565a4e47d1ea86ff"
+      },
+      "sha256": "964b2622f5f9207fb1bbcf7d7e6cddac8ed8f5ed1187cefd6d77517103320e2d",
+      "bytes": 1309418432
+    },
+    "failing_input": {
+      "file": "train/c3cae9cd4b08709a_0045483840_0045823680.wav",
+      "source_sha256": "79fdc2585caa7679b85c8aca90c13336018b89a1acbc9255e918cfdbc95bad67",
+      "frames": 339840,
+      "sample_rate": 48000,
+      "peak": 0.49751341342926025,
+      "rms": 0.06025457668132336,
+      "finite": true,
+      "arrays": {
+        "features": {
+          "shape": [
+            706,
+            768
+          ],
+          "finite": true,
+          "minimum": -4.4140625,
+          "maximum": 3.5625
+        },
+        "pitch": {
+          "shape": [
+            706
+          ],
+          "finite": true,
+          "minimum": 0.0,
+          "maximum": 302.21661376953125
+        },
+        "coarse": {
+          "shape": [
+            706
+          ],
+          "finite": true,
+          "minimum": 1.0,
+          "maximum": 85.0
+        }
+      },
+      "epoch": 1,
+      "offset": 65
+    },
+    "root_cause": "unproven; first nonfinite intermediate not captured",
+    "analysis_sha256": "e9f2edb5311e07679a0d2b047da58d7c2aeab645eb46952e518ecf70fc18869e"
+  },
+  "inference_export": {
+    "file": "pilot-v2-48k.pth",
+    "sha256": "7bde330ed867316688caa05459b3aba979c86c48cb9d6fd1cd653b6387bfe6f2",
+    "step": 9,
+    "parent_sha256": "c12b4283c57a7d2c828eebcfac490483344f8bf4af85b36c2d37dd5bfd921077",
+    "quality": "unqualified pilot"
+  },
+  "guards": [
+    {
+      "check": "blocked-resume",
+      "returncode": 1,
+      "budget_unchanged": true
+    },
+    {
+      "check": "blocked-qualification",
+      "returncode": 1,
+      "budget_unchanged": true
+    }
+  ],
+  "final": {
+    "gpu_used_mib": 0,
+    "free_disk_bytes": 23206166528
+  },
+  "pending": [
+    "numerical diagnosis and bounded recovery plan",
+    "stable pilot",
+    "real custom-voice conversion and memory qualification",
+    "matching retrieval index delivery",
+    "converted ASR and real-model UI checks",
+    "human dataset and voice-quality listening"
+  ]
+}
